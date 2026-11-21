@@ -20,7 +20,7 @@ graph TD
         Tpl["templates: Pydantic registry"]
     end
 
-    LLM["OpenAI-compatible LLM endpoint<br/>(default DeepSeek, non-thinking)"]
+    LLM["OpenAI-compatible LLM endpoint<br/>(default DeepSeek; thinking level per case / question)"]
     EMB["OpenAI-compatible embedding endpoint<br/>(multilingual, pinned dimension)"]
     Neo4j[("Neo4j ≥ 5.26<br/>Graphiti graph + IG_* nodes")]
     Files[("Local files: sanitized images, normalized source text")]
@@ -87,10 +87,27 @@ graph TD
   )
   ```
 
-  Use `json_object` mode if DeepSeek rejects `json_schema`. This client does not route requests to `small_model`, so **Graphiti uses one model**. IntelGraph's own calls go through the OpenAI SDK; P2 classification may use `LLM_SMALL_MODEL`.
-* **Thinking mode and temperature.** DeepSeek defaults to thinking mode. Disable it for every call, and set temperature explicitly. Confirm the request parameter in M0.
+  * **`json_object` is required.** DeepSeek's Chat Completions API supports only `text` and `json_object`; there is no `json_schema`.
+  * **Graphiti uses one model.** This client does not route requests to `small_model`.
+  * IntelGraph's own calls go through the OpenAI SDK; P2 classification may use `LLM_SMALL_MODEL`.
+* **Thinking levels.** DeepSeek enables thinking by default (effort `high`), so every call must state a level explicitly.
+  * The backend's **provider profile** (`LLM_PROVIDER_PROFILE`) maps each level to request parameters. The DeepSeek profile is:
+
+    | Level | Request parameter |
+    | :--- | :--- |
+    | `off` | `extra_body={"thinking": {"type": "disabled"}}` |
+    | `low` / `medium` / `high` | `extra_body={"reasoning_effort": <level>}` |
+
+    All of these were accepted during environment setup.
+  * A profile can declare that it has no thinking support. The UI then hides the selectors.
+  * Graphiti's `OpenAIGenericClient` sends neither parameter. The adapter subclasses it and injects `extra_body` from the running job's extraction level.
+  * In thinking mode the provider ignores `temperature`, so results vary more.
+  * Extraction under any level other than `off` must keep producing valid `json_object` output. This is verified per level in M0.
+  * Vision transcription always runs with `off`.
 * **Language.** Graphiti appends a "use the same language as the source" instruction. The adapter overrides it so that fact text and summaries are zh-CN while entity names keep their native form. The planned approach is to wrap the client's language hook. Verify it with one Chinese and one English chunk.
-* **Embedder.** Use `OpenAIEmbedder` against a multilingual endpoint (e.g. `bge-m3`, 1024 dimensions). Pin the model and dimension.
+* **Embedder.** Use `OpenAIEmbedder` against a multilingual endpoint. The default is Alibaba Bailian `qwen3.7-text-embedding`, at 1024 dimensions, served on the OpenAI-compatible path `/compatible-mode/v1` (not DashScope's native `/api/v1`).
+  * Graphiti does not send a `dimensions` argument; it truncates vectors to `EMBEDDING_DIM`. The model's **native** output dimension must therefore equal `EMBEDDING_DIM`.
+  * Pin both the model and the dimension.
 * **Cross-encoder.** Inject an order-preserving stub that implements `CrossEncoderClient`. This means no OpenAI key is needed. IntelGraph does not use Graphiti's search scoring.
 * **Excerpt location.** After each chunk, `policy` embeds the chunk's sentences once. For each new support, the sentence nearest to the fact text becomes the excerpt (`located: "auto"`). If no sentence passes the threshold, the whole chunk is used (`located: "none"`). No LLM call is involved.
 * **Full-text search.** Graphiti creates its full-text indexes with the default analyzer. Benchmark Chinese recall in M0. If needed, recreate only the named indexes with Neo4j's `cjk` analyzer.

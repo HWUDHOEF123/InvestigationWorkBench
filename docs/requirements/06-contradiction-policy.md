@@ -35,7 +35,7 @@ The hook is pinned to the Graphiti version, and a contract test runs on every up
 
 ## P2 · Classify each attributed pair
 
-Each attributed pair is classified by one small-model call per batch (temperature 0, versioned prompt):
+Each attributed pair is classified by one small-model call per batch. The call uses temperature 0, a versioned prompt, and the case's classification thinking level, which defaults to `off`.
 
 | Label | Meaning |
 | :--- | :--- |

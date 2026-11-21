@@ -6,7 +6,7 @@
 
 | Region | Content |
 | :--- | :--- |
-| Top bar | Case name · template · entity search · recipient indicator ("内容发送至：LLM <host> · 向量 <host>") |
+| Top bar | Case name · template · entity search · recipient indicator ("内容发送至：LLM <host> · 向量 <host>") · ⚙ 案件设置 |
 | Left panel | Source list (tier badge, kind icon, progress, "推演" / "推测" badges) and drafts, with **+ 添加信源** · review list (冲突 / 待确认失效) · filters |
 | Canvas | Infinite React Flow viewport with a floating selection toolbar |
 | Right panel (inspector) | Tabs: **详情** (entity / fact / conflict / closure) · **证据** (excerpts, images, location label) · **问答** ([F6](features/F6-grounded-qa.md)) |
@@ -14,6 +14,17 @@
 
 * The left and right panels are collapsible.
 * All UI strings live in `i18n/zh-CN`; the keys are English.
+
+## Thinking-level controls
+
+The level is labelled **关闭 / 低 / 中 / 高**. Both controls below are hidden when `GET /providers/llm` returns no levels.
+
+* **问答 tab.** A segmented control sits next to the question box. Its default is the case's `qa_default`. A hint shows the typical extra latency.
+  * While the model is thinking, the tab shows "思考中…".
+  * The 思考过程 panel is collapsed by default ([F6](features/F6-grounded-qa.md)).
+* **⚙ 案件设置.** This holds the thinking levels for 信息抽取 and 矛盾分类, each defaulting to 关闭.
+  * Changes apply to chunks ingested afterwards.
+  * The dialog warns: "开启思考会增加每个切块的耗时与费用，且结果波动更大".
 
 ## Nodes
 

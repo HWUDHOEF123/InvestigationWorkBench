@@ -1,6 +1,6 @@
 # IntelGraph：时态知识图谱调查工作台
 
-> **版本 1.4.0-PRD** · 待实施草案 · 本文为中文阅读版。英文版按主题拆分在 [`requirements/`](requirements/README.md)，带索引，供 agent 按需读取；涉及标识符时以英文版为准，两份文档须同步更新。
+> **版本 1.5.0-PRD** · 待实施草案 · 本文为中文阅读版。英文版按主题拆分在 [`requirements/`](requirements/README.md)，带索引，供 agent 按需读取；涉及标识符时以英文版为准，两份文档须同步更新。
 
 IntelGraph 是一款面向中文分析师的调查工作台，把碎片化、强时效、相互矛盾的材料整理成一张处处有出处的案件图谱。底层基于 **Graphiti**（`graphiti-core==0.31.2`）和 **Neo4j**。
 
@@ -22,7 +22,11 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
 5. **时间轴与路径在前端计算**，基于内存中的快照，拖动时不请求服务端。
 6. **每条事实都关联到它的支撑信源**（`IG_FactSupport`）。摘录自动定位并加标注，定位不到时退回整个切块；问答引用一律校验。
 7. **语言。** 界面和生成内容用简体中文；代码、字段、枚举、关系类型用英文；实体名保留母语形式并附别名，如 `Jensen Huang（黄仁勋）`。适配层要覆盖 Graphiti 默认的“沿用原文语言”指令。
-8. **模型服务。** 一律通过 OpenAI 兼容端点调用（默认 DeepSeek，非思考模式）。Graphiti 只用一个模型；向量模型须多语言，并固定维度；关闭 Graphiti 遥测。
+8. **模型服务。** 一律通过 OpenAI 兼容端点调用（默认 DeepSeek，`json_object` 模式）。
+   * **思考强度**（`off` / `low` / `medium` / `high`，即关闭 / 低 / 中 / 高）可以选择：抽取和分类按案件设置，问答按每次提问设置，默认都是关闭。每档对应的请求参数由服务商配置（provider profile）决定。
+   * Graphiti 只用一个模型。
+   * 向量模型须支持多语言，其原生输出维度必须等于 `EMBEDDING_DIM`。
+   * 关闭 Graphiti 遥测。
 
 ## 术语表
 
@@ -41,6 +45,7 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
 | 冲突（Conflict） | 一条被记录的矛盾（`disagreement` 或 `contested_change`），带建议和裁决结果 |
 | 决策记录 | 只追加的审计记录，每次策略决定和分析师操作都写一条，也是撤销的依据 |
 | 版本（Revision） | 案件有效图的单调递增版本号 |
+| 思考强度 | `off` \| `low` \| `medium` \| `high`：一次调用允许模型进行多少推理；由服务商配置映射为具体的请求参数 |
 | 推测 / 推演 | 推测：来自勾选了“这是推测”的笔记，只有当一条事实的全部支撑都是推测时，这条事实才算推测。推演：来自测试场景中 `synthetic: true` 的信源，无论在哪里出现都标“推演” |
 
 ---
@@ -123,7 +128,7 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
 
 | 对象 | 含义 | 归属 |
 | :--- | :--- | :--- |
-| Case | 模板及其版本、时区、带版本的案件指引、可选的故事锚点；对应 `group_id` | IntelGraph |
+| Case | 模板及其版本、时区、带版本的案件指引、可选的故事锚点，以及案件设置（抽取、分类、问答默认值三项思考强度，默认都是 `off`）；对应 `group_id` | IntelGraph |
 | Source | 等级、`reference_time`、可选发言人、各类标记 | IntelGraph |
 | Chunk | 对规范化文本确定性切分出的片段，带字符偏移和导入检查点 | IntelGraph |
 | Episode | 一个切块对应的 Graphiti `EpisodicNode`，命名为 `{source_id}:{chunk_index}`，其 `valid_at` 等于信源的 `reference_time` | Graphiti |
@@ -377,7 +382,7 @@ Graphiti 的检测是有上限、尽力而为的，不能当作完整检测：
 
 **P2 · 对已归因的配对分类。**
 
-每批调用一次小模型（temperature 0，提示词带版本号），打上以下标签之一：
+每批调用一次小模型，打上以下标签之一。调用使用 temperature 0、带版本号的提示词，以及案件设置中的分类思考强度（默认 `off`）。
 
 | 标签 | 含义 |
 | :--- | :--- |
@@ -454,7 +459,7 @@ graph TD
         Tpl["templates：Pydantic 注册表"]
     end
 
-    LLM["OpenAI 兼容 LLM 端点<br/>（默认 DeepSeek，非思考模式）"]
+    LLM["OpenAI 兼容 LLM 端点<br/>（默认 DeepSeek；思考强度按案件 / 提问设置）"]
     EMB["OpenAI 兼容 Embedding 端点<br/>（多语言，固定维度）"]
     Neo4j[("Neo4j ≥ 5.26<br/>Graphiti 图 + IG_* 节点")]
     Files[("本地文件：脱敏图片、规范化原文")]
@@ -512,10 +517,28 @@ graph TD
 
 ### 7.3 集成要点（均在 M0 中验证）
 
-* **Graphiti 的 LLM。** 配置为 `OpenAIGenericClient(config=LLMConfig(api_key=…, base_url=…, model=…), structured_output_mode="json_object")`；如果 DeepSeek 拒绝 `json_schema`，就用 `json_object`。这个客户端不会把请求分流给 `small_model`，所以 **Graphiti 只用一个模型**。IntelGraph 自己的调用走 OpenAI SDK，其中 P2 分类可以使用 `LLM_SMALL_MODEL`。
-* **思考模式与温度。** DeepSeek 默认开启思考模式，所有调用都要关掉；temperature 一律显式设置。具体的请求参数在 M0 中确认。
+* **Graphiti 的 LLM。** 配置为 `OpenAIGenericClient(config=LLMConfig(api_key=…, base_url=…, model=…), structured_output_mode="json_object")`。
+  * **必须用 `json_object`**：DeepSeek 的 Chat Completions 只支持 `text` 和 `json_object`，没有 `json_schema`。
+  * **Graphiti 只用一个模型**：这个客户端不会把请求分流给 `small_model`。
+  * IntelGraph 自己的调用走 OpenAI SDK，其中 P2 分类可以使用 `LLM_SMALL_MODEL`。
+* **思考强度。** DeepSeek 默认开启思考（强度为 `high`），所以每次调用都必须明确指定档位。
+  * 后端的**服务商配置**（`LLM_PROVIDER_PROFILE`）负责把档位映射为请求参数。DeepSeek 的对应关系如下，环境调试时均已验证可用：
+
+    | 档位 | 请求参数 |
+    | :--- | :--- |
+    | `off` | `extra_body={"thinking": {"type": "disabled"}}` |
+    | `low` / `medium` / `high` | `extra_body={"reasoning_effort": <档位>}` |
+
+  * 如果服务商配置声明不支持思考，界面就隐藏所有思考强度选择器。
+  * Graphiti 的 `OpenAIGenericClient` 不会发送这两个参数；适配层通过子类化它，按当前任务的抽取强度注入 `extra_body`。
+  * 思考模式下服务商会忽略 `temperature`，结果波动更大。
+  * 抽取在 `off` 以外的各档下都必须仍能输出合法的 `json_object`，这一点在 M0 中逐档验证。
+  * 视觉转写一律使用 `off`。
 * **输出语言。** Graphiti 会追加“沿用原文语言”的指令。适配层要覆盖它，使事实描述和摘要输出中文，实体名保留母语形式。计划的做法是包装客户端的语言钩子，并用一个中文切块和一个英文切块分别验证。
-* **向量模型。** 用 `OpenAIEmbedder` 接多语言端点（如 `bge-m3`，1024 维），固定模型和维度。
+* **向量模型。** 用 `OpenAIEmbedder` 接多语言端点，默认是阿里百炼 `qwen3.7-text-embedding`（1024 维）。
+  * 要用 OpenAI 兼容路径 `/compatible-mode/v1`，不要用 DashScope 原生的 `/api/v1`。
+  * Graphiti 不会发送 `dimensions` 参数，而是把向量截断成 `EMBEDDING_DIM` 维，所以模型的**原生**输出维度必须等于 `EMBEDDING_DIM`。
+  * 模型和维度都要固定。
 * **重排序。** 注入一个保持原有顺序的 `CrossEncoderClient` 桩实现，这样就不需要 OpenAI 密钥。IntelGraph 不使用 Graphiti 的检索打分。
 * **摘录定位。** 每个切块处理完后，`policy` 把切块中的句子各生成一次向量；每条新支撑取与事实描述最接近的那句作为摘录（`located: "auto"`）。没有句子超过阈值时，退回整个切块（`located: "none"`）。这一步不调用 LLM。
 * **全文检索。** Graphiti 用默认分析器建全文索引。M0 中测试中文召回率，必要时只把相关的索引改用 `cjk` 分析器重建。
@@ -552,7 +575,7 @@ graph TD
   * 单个信源最多 200,000 字符。
   * 按段落边界切成约 1,500 token 的块；过长的段落在句子边界处再切。
   * 每个块记录它在规范化文本中的字符偏移。
-* **导入任务：** 启动时固定模板版本和指引版本，然后一次处理一个切块：
+* **导入任务：** 启动时固定模板版本、指引版本，以及抽取和分类的思考强度（每个切块都会记录这些值），然后一次处理一个切块：
   1. `add_episode(name="{source_id}:{chunk_index}", …)`
   2. P1–P4
   3. 支撑与摘录定位
@@ -670,9 +693,11 @@ graph TD
   "as_of_ts": 0,
   "snapshot_version": 0,
   "question": "",
-  "options": { "include_history": true, "include_speculative": false }
+  "options": { "include_history": true, "include_speculative": false, "thinking": "off" }
 }
 ```
+
+* `options.thinking`：`off` | `low` | `medium` | `high`，默认取案件设置中的 `qa_default`（`off`）。在问答标签页里每次提问都可以选择；档位越高越慢，但推理更充分。
 
 * `entity_ids`：1–8 个实体。
 * `question`：可选，默认是“梳理这些实体之间的关系、最有依据的结论、矛盾与信息缺口”。
@@ -691,7 +716,7 @@ graph TD
 * **系统提示：**
   * 包含案件指引；
   * 信源原文作为引用的数据嵌入，忽略其中的任何指令；
-  * 使用非思考模式。
+  * 按请求指定的思考强度运行。
 
 **回答格式：** 中文 Markdown，固定小节为 `## 关键判断`、`## 证据`、`## 矛盾`、`## 信息缺口`。关键判断每条占一个列表项，结尾附引用和置信度，例如 `…[F3][F7]（置信度：中）`。
 
@@ -706,6 +731,7 @@ graph TD
 | 事件 | 内容 |
 | :--- | :--- |
 | `context` | `{id_map, fact_ids}`，画布立即高亮这些事实 |
+| `reasoning` | `{text}`。仅在思考强度不是 `off` 时出现，逐段推送服务商返回的推理内容（`delta.reasoning_content`）。界面放在默认折叠的“思考过程”面板里，标注“模型思考过程，未经校验，不作为证据”。这部分不做引用校验，复制时不带上，也不保存 |
 | `token` | `{text}` |
 | `citations` | 逐条判断给出：不存在的编号、缺少引用、引用了已驳斥事实、含推演支撑；界面分别标为“缺乏依据”“引用已驳斥事实”“含推演” |
 | `done` 或 `error` | 结束事件，恰好发送一次 |
@@ -723,7 +749,8 @@ graph TD
 **预算：**
 
 * `context` 事件在请求后 ≤ 300 ms 内到达。
-* 记录从 context 到首字、以及完整回答的耗时，并记下供应商、模型和思考设置；目标是在 M3 的测试提示词集上，首字 p50 ≤ 2 s。
+* 每次请求都记录：从 `context` 到首个推理事件的耗时、到首个回答字符的耗时、完整回答的耗时，以及服务商、模型和思考强度。
+* **目标（仅针对 `off` 档）：** 在 M3 的测试提示词集上，回答首字 p50 ≤ 2 s。更高档位不设卡口，选择器旁会提示大致的额外耗时（如“约 +1–2 s”）。
 
 ## 九、数据契约与接口
 
@@ -736,9 +763,12 @@ graph TD
 * 名称、别名、标题和原文保持原语言。
 
 ```ts
+type ThinkingLevel = 'off' | 'low' | 'medium' | 'high';
 type Snapshot = {
   case: { id: string; name: string; template: string; template_version: string; timezone: string;
-          time_mode: 'absolute' | 'story'; story_anchor_ts?: number };
+          time_mode: 'absolute' | 'story'; story_anchor_ts?: number;
+          settings: { thinking: { extraction: ThinkingLevel; classification: ThinkingLevel;
+                                  qa_default: ThinkingLevel } } };   // 默认均为 'off'
   version: number;
   entities: Entity[]; facts: Fact[]; conflicts: Conflict[]; sources: Source[];
   layout: { version: number; positions: Record<string, { x: number; y: number }> };
@@ -798,7 +828,9 @@ type ImageDraft = {
 | 方法与路径 | 用途 |
 | :--- | :--- |
 | `GET /templates` | 模板及其版本 |
+| `GET /providers/llm` | `{model, thinking_levels: ThinkingLevel[]}`；列表为空表示该服务商不支持思考，界面隐藏选择器 |
 | `POST /cases` · `GET /cases/{id}` | 新建 / 读取案件 |
+| `PUT /cases/{id}/settings` | `{thinking: {extraction, classification, qa_default}}`；只对之后启动的任务生效，并写入决策记录 |
 | `GET /cases/{id}/brief` · `PUT /cases/{id}/brief` | 案件指引（带版本） |
 | `GET /cases/{id}/snapshot` | 最新的有效图；支持 `ETag` / `If-None-Match` |
 | `GET /cases/{id}/events` | 案件事件流（SSE，见下文） |
@@ -814,7 +846,7 @@ type ImageDraft = {
 | `POST /conflicts/{id}/adjudicate` | P6 裁决 `{outcome \| "hold", note}` |
 | `POST /facts/{id}/closure` | 处理待确认的失效 `{action: "confirm" \| "revert", note?}` |
 | `POST /cases/{id}/merges` | `{alias_id, canonical_id, canonical_name?, version}` |
-| `POST /decisions/{id}/undo` | 撤销任意可撤销的决策：裁决、失效处理、等级调整、合并、重新布局 |
+| `POST /decisions/{id}/undo` | 撤销任意可撤销的决策：裁决、失效处理、等级调整、合并、重新布局、设置修改 |
 | `GET /cases/{id}/decisions` | 审计记录，可按对象和类型筛选 |
 | `POST /cases/{id}/qa` | 有据问答（一次性 SSE 响应，见 F6） |
 | `PUT /cases/{id}/layout` | `{positions, layout_version}` |
@@ -844,13 +876,22 @@ type ImageDraft = {
 
 | 区域 | 内容 |
 | :--- | :--- |
-| 顶栏 | 案件名 · 模板 · 实体搜索 · 接收方提示（“内容发送至：LLM <host> · 向量 <host>”） |
+| 顶栏 | 案件名 · 模板 · 实体搜索 · 接收方提示（“内容发送至：LLM <host> · 向量 <host>”）· ⚙ 案件设置 |
 | 左栏 | 信源列表（等级角标、类型图标、进度、“推演”/“推测”角标）与草稿，带 **+ 添加信源** · 审阅列表（冲突 / 待确认失效）· 过滤 |
 | 画布 | 无限 React Flow 视口，带浮动的选区工具栏 |
 | 右栏（检查器） | 标签页：**详情**（实体 / 事实 / 冲突 / 失效）· **证据**（摘录、图片、定位标注）· **问答**（F6） |
 | 底部控制台 | 时间轴：单步与播放、滑块、直方图、截至时间 |
 
 左右两栏均可折叠。界面文案统一放在 `i18n/zh-CN`，键名用英文。
+
+**思考强度选择器**（显示为 关闭 / 低 / 中 / 高；`GET /providers/llm` 没有返回任何档位时，两处都隐藏）：
+
+* **问答标签页：** 问题输入框旁有一个分段选择器，默认取案件的 `qa_default`，并提示该档位通常增加的耗时。
+  * 模型思考期间显示“思考中…”。
+  * “思考过程”面板默认折叠（见 F6）。
+* **⚙ 案件设置：** 可分别设置“信息抽取”和“矛盾分类”的思考强度，默认都是关闭。
+  * 修改只对之后导入的切块生效。
+  * 对话框中提示：“开启思考会增加每个切块的耗时与费用，且结果波动更大”。
 
 ### 10.2 节点
 
@@ -902,18 +943,18 @@ type ImageDraft = {
 
 ## 十一、非功能需求
 
-**基准条件：** 300 个实体 / 1,000 条事实；Apple M1、16 GB 内存；最新稳定版 Chrome。模型服务的耗时以配置的 DeepSeek 端点、非思考模式实测。
+**基准条件：** 300 个实体 / 1,000 条事实；Apple M1、16 GB 内存；最新稳定版 Chrome。模型服务的耗时以配置的 DeepSeek 端点、思考强度为 `off` 实测。
 
 | 方面 | 要求 |
 | :--- | :--- |
 | 快照加载 | 从请求到画布可交互 ≤ 1.5 s（gzip 压缩；JSON 中不含向量和二进制数据） |
 | 时间轴拖动 | 可见性计算 ≤ 2 ms；拖动时帧时间 p95 ≤ 18 ms，包括渲染和绘制 |
 | 路径 | 前端 ≤ 50 ms |
-| 问答 | `context` ≤ 300 ms；记录从 context 到首字、以及完整回答的耗时；目标首字 p50 ≤ 2 s（在 M3 卡口） |
+| 问答 | `context` ≤ 300 ms；记录到首个推理事件、到首个回答字符、完整回答的耗时；目标：思考强度为 `off` 时，回答首字 p50 ≤ 2 s（在 M3 卡口）；更高档位只记录、不卡口 |
 | 导入 | 阶段变化 1 s 内可见；记录每个切块的耗时，但不作为卡口；场景目标见 A6 |
 | 可靠性 | SSE 断线续传或 `resync`；新建信源幂等；切块检查点与续传；策略对每个切块幂等 |
 | 持久性 | **持久保存：** 案件、指引、信源、草稿（24 小时）、Graphiti 图、`IG_*` 状态、布局、决策。**只在会话内保留：** 问答回答、当前选择。**存在浏览器 localStorage：** 过滤条件、滑块位置、面板状态 |
-| 低波动 | temperature 一律显式设置（抽取、转写、分类为 0），并使用非思考模式；每个切块记录模型、提示词和模板的版本。结果低波动，但不保证完全相同 |
+| 低波动 | temperature 一律显式设置（抽取、转写、分类为 0）。思考强度默认为 `off`；在其他档位下，服务商会忽略 temperature，结果波动增大。每个切块都记录模型、提示词、模板版本和思考强度。结果低波动，但不保证完全相同 |
 | 可审计 | 每次策略决定和分析师操作都写一条决策记录，包含操作者、时间、输入、前后值 |
 | 隐私 | 接口和 Neo4j 只绑定 `127.0.0.1`；密钥放在 `.env`；关闭 Graphiti 遥测；界面列出所有接收内容的端点；原图字节不离开浏览器；支持任意 OpenAI 兼容的自托管端点 |
 | 无障碍 | 形状与颜色双重编码；尊重减少动效设置；文字对比度达到 WCAG AA；操作可用键盘完成 |
@@ -990,7 +1031,7 @@ type ImageDraft = {
 
 | 里程碑 | 内容 | 退出标准（需交付的具体产物） |
 | :--- | :--- | :--- |
-| M0 技术验证与数据 | 1. 通过 `OpenAIGenericClient` 接入 DeepSeek（结构化输出模式、关闭思考、设置温度），并用一个中文切块和一个英文切块验证语言覆盖；2. 视觉（一张图片）；3. 多语言向量模型与重排序桩；4. `invalidated_by` 钩子，以及写回对 Graphiti 可见；5. 两个案件相互隔离；6. Graphiti 已提交后的续传；7. 中文全文召回（默认分析器 vs `cjk`）；8. 关闭遥测；9. 冻结 S0–S3，编写 S4–S7 和场景 B | 技术验证报告（每项一节）+ 冻结的测试信源 |
+| M0 技术验证与数据 | 1. 通过 `OpenAIGenericClient` 接入 DeepSeek：`json_object` 模式、由适配层注入思考强度、各档位下抽取结果是否为合法 JSON，并用一个中文切块和一个英文切块验证语言覆盖和命名规则；2. 视觉（一张图片）；3. 多语言向量模型与重排序桩；4. `invalidated_by` 钩子，以及写回对 Graphiti 可见；5. 两个案件相互隔离；6. Graphiti 已提交后的续传；7. 中文全文召回（默认分析器 vs `cjk`）；8. 关闭遥测；9. 冻结 S0–S3，编写 S4–S7 和场景 B | 技术验证报告（每项一节）+ 冻结的测试信源 |
 | M1 后端核心 | 录入（草稿、切块、检查点、续传）、`graph` 适配层、P1–P6、支撑与摘录、决策与撤销、快照与版本、SSE | 策略单元测试和适配层契约测试通过；A1–A3 及 A5 的后端部分通过 API 验证 |
 | M2 前端核心（可基于手写 fixture 并行启动） | 画布、布局、时间轴、过滤、审阅、路径、合并、检查器 | fixture 端到端测试通过；A4、A6、B1–B3 在界面上通过；满足第十一章中除问答外的前端预算 |
 | M3 问答与验收 | 有据问答、导出 fixture、live 检查清单 | A5（裁决部分）、A7 和场景 B 全部通过；达到问答时延目标 |
@@ -998,7 +1039,7 @@ type ImageDraft = {
 | 风险 | 应对 |
 | :--- | :--- |
 | Graphiti 升级破坏 `invalidated_by` 钩子或写回的前提 | 固定 0.31.2；两者都隔离在 `graph` 适配层内；升级前先跑契约测试 |
-| DeepSeek 兼容性（结构化输出、视觉、模型 ID、思考参数） | 先做 M0 验证；端点和模型都只是配置项 |
+| DeepSeek 兼容性（结构化输出、视觉、模型 ID、思考参数） | 基础项已在环境调试中验证；M0 逐档验证抽取；端点、模型和服务商配置都只是配置项 |
 | 中文抽取质量与命名漂移 | 模板指令、语言覆盖、已知别名表；日期和别名在界面上可见，可通过合并纠正 |
 | 中文全文检索或跨语言匹配效果弱 | 多语言向量模型；M0 证明有提升时启用 `cjk`；手动合并 |
 | Graphiti 漏检或误判矛盾 | P5 手动冲突；待确认失效审阅；只给建议；一切可撤销 |
@@ -1008,87 +1049,99 @@ type ImageDraft = {
 
 ## 十四、环境与启动
 
-* Python ≥ 3.11，`graphiti-core==0.31.2`；Node.js ≥ 20 LTS，pnpm ≥ 9；Neo4j ≥ 5.26 Community（不需要插件）；OpenAI 兼容的 LLM 端点（默认 DeepSeek）；OpenAI 兼容的多语言向量端点。
+**环境要求**
+
+* **Python ≥ 3.11。** `backend/requirements.in` 列出顶层依赖，`backend/requirements.txt` 是用 uv 编译出的锁定版本。
+  * `graphiti-core==0.31.2` 精确锁定。
+  * 它的间接依赖限制在 Graphiti v0.31.2 测试过的版本：`openai<3`、`httpx[socks] 0.28.x`、`neo4j<7`。
+  * Graphiti 直接 import 了 `httpx` 却没有把它声明为依赖，而 openai 3.x 已不再附带它。
+  * 需要 `[socks]` 扩展，是因为 httpx 会读取环境变量里的 `ALL_PROXY=socks5://…`。
+* **Node.js ≥ 20 LTS；pnpm ≥ 9。**
+* **Neo4j ≥ 5.26 Community**，用 Homebrew 原生安装，不需要 Docker，也不需要插件。
+  * Homebrew 提供的是日历版本线（目前为 2026.10.x），比 5.26 更新。
+  * 默认只监听 `127.0.0.1`。
+* **OpenAI 兼容的 LLM 端点**，默认 DeepSeek（可用模型 `deepseek-flash`、`deepseek-v4-pro`）。
+* **OpenAI 兼容的云端向量服务**，须提供多语言模型；默认阿里百炼 `qwen3.7-text-embedding`（原生 1024 维）。
+  * 使用兼容路径：`https://dashscope.aliyuncs.com/compatible-mode/v1`，或你的工作空间域名加 `/compatible-mode/v1`。
+  * 需要生成向量的文本（实体名、事实描述）会发送到该服务；界面上的接收方提示会列出它。
+* **代理：** 会遵循环境变量中的 HTTP 和 SOCKS 代理（`HTTP(S)_PROXY`、`ALL_PROXY`）；`NO_PROXY` 中应包含 `127.0.0.1` 和 `localhost`，确保 Neo4j 和后端接口直连。
 
 ```text
-backend/app/      api/ intake/ graph/ policy/ snapshot/ qa/ templates/
-backend/scripts/  seed_case.py · drop_source.py · export_snapshot.py   （调用运行中的后端接口）
-frontend/src/     canvas/ timeline/ panels/ inspector/ store/ api/（生成的类型） i18n/zh-CN/
-fixtures/         nvidia/ rainy_manor/
-docs/             requirements/（英文，标识符以此为准） · requirements(cn).md
-docker-compose.yml
+backend/app/        api/ intake/ graph/ policy/ snapshot/ qa/ templates/
+backend/scripts/    check_env.py · seed_case.py · drop_source.py · export_snapshot.py   （场景脚本调用运行中的后端接口）
+backend/requirements.in · requirements.txt · .env.example
+frontend/src/       canvas/ timeline/ panels/ inspector/ store/ api/（生成的类型） i18n/zh-CN/
+fixtures/           nvidia/ rainy_manor/
+docs/               requirements/（英文，标识符以此为准） · requirements(cn).md
 ```
 
-**`backend/.env`**
+**`backend/.env`**（从 `backend/.env.example` 复制，已被 git 忽略）
 
 ```ini
 APP_MODE=live                          # live | fixture
 API_HOST=127.0.0.1
 NEO4J_URI=bolt://127.0.0.1:7687
 NEO4J_USER=neo4j
-NEO4J_PASSWORD=password_change_me
+NEO4J_PASSWORD=change_me               # 首次启动前设置的初始密码
 GRAPHITI_TELEMETRY_ENABLED=false       # 必须在引入 graphiti_core 之前设置
 SEMAPHORE_LIMIT=4                      # Graphiti 内部 LLM、向量、检索调用的并发上限
 
 LLM_BASE_URL=https://api.deepseek.com
-LLM_API_KEY=...
+LLM_API_KEY=
 LLM_MODEL=deepseek-flash               # 用于 Graphiti、视觉、问答；确切 ID 在 M0 中确认
 LLM_SMALL_MODEL=deepseek-flash         # 仅用于 IntelGraph 的 P2 分类
-LLM_STRUCTURED_OUTPUT=json_object      # json_schema | json_object
-LLM_THINKING=disabled                  # 非思考模式；具体参数在 M0 中确认
+LLM_STRUCTURED_OUTPUT=json_object      # DeepSeek 只支持 json_object
+LLM_PROVIDER_PROFILE=deepseek          # 把思考强度 off/low/medium/high 映射为请求参数
 
-EMBEDDING_BASE_URL=http://127.0.0.1:11434/v1
-EMBEDDING_API_KEY=none
-EMBEDDING_MODEL=bge-m3                 # 多语言；更换须重新生成向量
-EMBEDDING_DIM=1024
+EMBEDDING_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+EMBEDDING_API_KEY=
+EMBEDDING_MODEL=qwen3.7-text-embedding # 多语言；更换须重新生成向量
+EMBEDDING_DIM=1024                     # 必须等于模型的原生输出维度
 ```
 
-**`docker-compose.yml`**（仓库根目录）
+**一次性准备**
 
-```yaml
-services:
-  neo4j:
-    image: neo4j:5.26-community
-    container_name: intelgraph-neo4j
-    ports: ["127.0.0.1:7474:7474", "127.0.0.1:7687:7687"]
-    environment:
-      - NEO4J_AUTH=neo4j/password_change_me
-    volumes: [neo4j_data:/data]
-    healthcheck:
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p password_change_me 'RETURN 1' || exit 1"]
-      interval: 10s
-      retries: 10
-volumes:
-  neo4j_data:
-```
-
-健康检查只能说明 Bolt 已能接受连接。后端启动时会先建好 Graphiti 的索引和约束，再执行 `CALL db.awaitIndexes()` 等待索引就绪，之后才接受请求。
-
-**终端 1 — 基础设施**（仓库根目录）：
+**Neo4j（macOS / Homebrew）：** 必须在首次启动前设置初始密码。
 
 ```bash
-docker compose up -d neo4j
+brew install neo4j                                         # 会一并安装 openjdk@21 和 cypher-shell
+neo4j-admin dbms set-initial-password '<密码>'
+brew services start neo4j                                  # 作为后台服务运行；停止：brew services stop neo4j
 ```
 
-**终端 2 — 后端**（`backend/` 目录）：
+**后端**（`backend/` 目录）：
 
 ```bash
-python3 -m venv venv && source venv/bin/activate
-pip install -r requirements.txt && cp .env.example .env
-uvicorn app.main:app --host 127.0.0.1 --port 8000
+uv venv venv --python 3.11
+VIRTUAL_ENV=venv uv pip sync requirements.txt
+cp .env.example .env                                       # 填写 NEO4J_PASSWORD 和两个 API key
+venv/bin/python scripts/check_env.py                       # 检查 Python、graphiti-core、Neo4j、LLM（关闭思考）、向量服务
 ```
 
-fixture 模式改为 `APP_MODE=fixture` 启动，此时不需要 Neo4j 和 LLM。
+* `check_env.py` 只有在全部检查通过时才以 0 退出。
+* 向量检查还会打印“黄仁勋”与“Jensen Huang”的跨语言相似度。
+* 更新依赖：先改 `requirements.in`，再执行 `uv pip compile requirements.in -o requirements.txt --python-version 3.11`，然后重新 sync。
 
-**终端 3 — 场景脚本**（`backend/` 目录，后端须在运行）：
+**索引就绪：** 后端启动时先建好 Graphiti 的索引和约束，再执行 `CALL db.awaitIndexes()` 等待索引就绪，之后才接受请求。
+
+**运行**
+
+**终端 1 — 后端**（`backend/` 目录）：
 
 ```bash
-source venv/bin/activate
-python scripts/seed_case.py --case nvidia --through S6
-python scripts/drop_source.py --case nvidia --source S7   # 现场投放
+venv/bin/uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
-**终端 4 — 前端**（`frontend/` 目录）：
+fixture 模式改为用 `APP_MODE=fixture` 启动，此时不需要 Neo4j 和 LLM。
+
+**终端 2 — 场景脚本**（`backend/` 目录，后端须在运行）：
+
+```bash
+venv/bin/python scripts/seed_case.py --case nvidia --through S6
+venv/bin/python scripts/drop_source.py --case nvidia --source S7      # 现场投放
+```
+
+**终端 3 — 前端**（`frontend/` 目录）：
 
 ```bash
 pnpm install && pnpm dev                                    # http://127.0.0.1:5173，/api 代理到 :8000
@@ -1113,5 +1166,6 @@ pnpm install && pnpm dev                                    # http://127.0.0.1:5
 | 1.2.0 | v1 收缩为 F1–F6；确立中文优先；新增图片与笔记信源；通用本体与模板；接入 DeepSeek；新增场景 A/B。 |
 | 1.3.0 | v1 去掉认知时间；新增决策记录；英文版拆分为目录。 |
 | 1.4.0 | 落实独立审核（Codex，已对照 `graphiti-core` 0.31.2 源码核实）：通过 `invalidated_by` 精确记录失效原因；失效写回；`IG_FactSupport` 证据；切块检查点与续传；改为 `graph.changed` + 重新拉取快照；图片草稿；P6 完整的状态流转；完整的样式与筛选规则；问答请求与事件流格式；修正场景 A/B；关闭遥测、端口只绑定本机、去掉 APOC；转述限级移入待实现；标题去掉“双时态”；修复中英文差异与失效链接。 |
+| 1.5.0 | **思考强度可选**（关闭/低/中/高，默认关闭）：抽取和分类按案件设置，问答按每次提问设置（可选显示未经校验的思考过程），由服务商配置映射、适配层注入。环境调试中验证的服务商事实：DeepSeek 只支持 `json_object`；默认开启思考，用 `thinking: {type: disabled}` 关闭；百炼的 OpenAI 兼容路径为 `/compatible-mode/v1`；向量模型的原生维度必须等于 `EMBEDDING_DIM`；SOCKS 代理下需要 `httpx[socks]`。环境改为 Homebrew 安装 Neo4j、使用云端向量服务。 |
 
-**IntelGraph Development Team** | *Version 1.4.0-PRD* | *License: MIT*
+**IntelGraph Development Team** | *Version 1.5.0-PRD* | *License: MIT*

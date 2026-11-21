@@ -22,7 +22,7 @@
   * Maximum 200,000 characters per source.
   * Chunks are about 1,500 tokens on paragraph boundaries. A paragraph that is too long is split at sentence boundaries.
   * Each chunk stores its character offsets in the normalized text.
-* **Ingestion job.** The template version and brief version are pinned when the job starts. The job runs one chunk at a time:
+* **Ingestion job.** The template version, the brief version and the extraction and classification thinking levels are pinned when the job starts. They are recorded for each chunk. The job runs one chunk at a time:
   1. `add_episode(name="{source_id}:{chunk_index}", …)`
   2. P1–P4
   3. supports and excerpt location

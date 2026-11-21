@@ -6,7 +6,7 @@
 
 | Object | Meaning | Owner |
 | :--- | :--- | :--- |
-| **Case** | One investigation: a template and version, a time zone, a versioned case brief and an optional story anchor. Maps to a Graphiti `group_id`. | IntelGraph |
+| **Case** | One investigation: a template and version, a time zone, a versioned case brief, an optional story anchor, and settings. The settings hold thinking levels for extraction, classification and the Q&A default; each defaults to `off`. Maps to a Graphiti `group_id`. | IntelGraph |
 | **Source** | One unit of evidence (document, confirmed image set or note) with tier, `reference_time`, optional speaker and flags. See [04](04-sources-and-tiers.md). | IntelGraph |
 | **Chunk** | A deterministic slice of a Source's normalized text, with character offsets and an ingestion checkpoint. | IntelGraph |
 | **Episode** | The Graphiti `EpisodicNode` for one chunk. It is named `{source_id}:{chunk_index}`, and its `valid_at` is the Source's `reference_time`. | Graphiti |

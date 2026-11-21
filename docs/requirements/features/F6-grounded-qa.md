@@ -12,9 +12,11 @@
   "as_of_ts": 0,
   "snapshot_version": 0,
   "question": "",
-  "options": { "include_history": true, "include_speculative": false }
+  "options": { "include_history": true, "include_speculative": false, "thinking": "off" }
 }
 ```
+
+* `options.thinking`: one of `off` | `low` | `medium` | `high`. It defaults to the case's `qa_default`, which is `off`. It is selectable per question in the 问答 tab ([09](../09-ui-ux.md)); a higher level is slower but reasons more.
 
 * `entity_ids`: 1–8 entities.
 * `question`: optional. The default question is "梳理这些实体之间的关系、最有依据的结论、矛盾与信息缺口".
@@ -37,7 +39,7 @@ Context is assembled deterministically from the cached snapshot of that version.
 * **System prompt.**
   * The case brief is included.
   * Source text is wrapped as quoted data: instructions inside sources are ignored.
-  * The model runs in non-thinking mode.
+  * The model runs at the requested thinking level.
 
 ## Answer grammar
 
@@ -60,6 +62,7 @@ SSE over `text/event-stream`, UTF-8. Each event has an `event:` line and a JSON 
 | Event | Contents |
 | :--- | :--- |
 | `context` | `{id_map, fact_ids}`. The canvas highlights these facts immediately. |
+| `reasoning` | `{text}`. Present only when the thinking level is not `off`. It streams the provider's reasoning, `delta.reasoning_content`. The UI shows it in a collapsed 思考过程 panel labelled "模型思考过程，未经校验，不作为证据". It is never citation-checked, never copied with the answer and never stored |
 | `token` | `{text}` |
 | `citations` | Per judgment: unknown IDs, missing citations, citations to refuted facts, and synthetic support. The UI marks each case as 缺乏依据 / 引用已驳斥事实 / 含推演. |
 | `done` or `error` | Terminal. Exactly one is sent. |
@@ -80,4 +83,5 @@ SSE over `text/event-stream`, UTF-8. Each event has an `event:` line and a JSON 
 ## Budget
 
 * `context` event ≤ 300 ms after the request.
-* Log context-to-first-token latency and total latency, together with the provider, model and thinking setting. Target: p50 first token ≤ 2 s on the M3 prompt set.
+* For every request, log the time from `context` to the first reasoning event, the time to the first answer token, and the total time. Log these together with the provider, model and thinking level.
+* **Target (thinking `off` only):** p50 first answer token ≤ 2 s on the M3 prompt set. Higher levels are not gated. Their latency is shown next to the selector (e.g. "约 +1–2 s").

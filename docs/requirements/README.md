@@ -1,6 +1,6 @@
 # IntelGraph Requirements — Index
 
-> **Version 1.4.0-PRD** · Draft for implementation · Chinese reading copy: [`../requirements(cn).md`](<../requirements(cn).md>) (keep in sync; these English files are canonical for identifiers)
+> **Version 1.5.0-PRD** · Draft for implementation · Chinese reading copy: [`../requirements(cn).md`](<../requirements(cn).md>) (keep in sync; these English files are canonical for identifiers)
 
 IntelGraph is a Chinese-language investigation workbench. It turns fragmented, time-sensitive, contradictory material into a source-grounded case graph on **Graphiti** (`graphiti-core==0.31.2`) and **Neo4j**.
 
@@ -34,13 +34,13 @@ The v1 core loop is: **ingest sources → view the graph at any event time → r
 | [features/F3-timeline.md](features/F3-timeline.md) | Event-time slider, ticks, visibility, performance | Timeline frontend |
 | [features/F4-contradiction-review.md](features/F4-contradiction-review.md) | Review list, conflict detail, adjudication, unconfirmed closures | Review UI |
 | [features/F5-path-discovery.md](features/F5-path-discovery.md) | Frontend shortest path, eligibility, tie-breaks | Pathing |
-| [features/F6-grounded-qa.md](features/F6-grounded-qa.md) | Q&A request, context, stream protocol, citation checks | Q&A backend and inspector |
+| [features/F6-grounded-qa.md](features/F6-grounded-qa.md) | Q&A request, thinking level, context, stream protocol, citation checks | Q&A backend and inspector |
 | [08-data-contract-api.md](08-data-contract-api.md) | Snapshot & evidence types, endpoints, SSE, errors | Any frontend↔backend work |
 | [09-ui-ux.md](09-ui-ux.md) | Layout, complete style table, interaction rules | Styling, components |
 | [10-non-functional.md](10-non-functional.md) | Budgets, reliability, durability, privacy | Performance and quality |
 | [11-verification.md](11-verification.md) | Scenarios A and B, test layers | Fixtures, tests, acceptance |
 | [12-delivery-and-risks.md](12-delivery-and-risks.md) | Milestones M0–M3, risks | Planning |
-| [13-setup.md](13-setup.md) | Requirements, repo layout, `.env`, compose, run commands | Environment setup |
+| [13-setup.md](13-setup.md) | Requirements, repo layout, `.env`, Homebrew Neo4j, `check_env.py`, run commands | Environment setup |
 | [14-references.md](14-references.md) | External references | Background research |
 
 ## Key invariants
@@ -52,7 +52,13 @@ The v1 core loop is: **ingest sources → view the graph at any event time → r
 5. **Timeline and paths run in the frontend** on the in-memory snapshot. No server calls are made while scrubbing. → F3, F5
 6. **Every fact links to its supporting sources** (`IG_FactSupport`). Excerpts are located automatically and labelled as such, with the whole chunk as fallback. Q&A citations are validated. → 03, F6
 7. **Language.** UI and generated content are in Simplified Chinese. Code, fields, enums and relation types are in English. Entity names keep their native form, with aliases (`Jensen Huang（黄仁勋）`). The adapter overrides Graphiti's "same language as source" instruction. → 01, 07
-8. **Providers.** All model calls use OpenAI-compatible endpoints (default DeepSeek, non-thinking mode). Graphiti uses a single model. The embedder is multilingual, with pinned dimensions. Graphiti telemetry is off. → 07
+8. **Providers.** All model calls use OpenAI-compatible endpoints (default DeepSeek, `json_object` mode).
+   * **Thinking level** (`off` / `low` / `medium` / `high`) is selectable: per case for extraction and classification, and per question for Q&A. The default is `off`. A provider profile maps each level to request parameters.
+   * Graphiti uses a single model.
+   * The embedder is multilingual, and its native dimension must equal `EMBEDDING_DIM`.
+   * Graphiti telemetry is off.
+
+   → 07
 
 ## Glossary
 
@@ -77,6 +83,7 @@ The v1 core loop is: **ingest sources → view the graph at any event time → r
 | Revision | A monotonically increasing version of a case's effective graph |
 | Effective graph | Graphiti data plus overlay (merges, conflicts, supports, flags), as served in the snapshot |
 | Case brief | Analyst guidance added to extraction and Q&A prompts; never ingested |
+| Thinking level | `off` \| `low` \| `medium` \| `high`. How much model reasoning a call may use; mapped to provider parameters by the provider profile |
 | Speculative | A support from a note flagged "这是推测". A fact is speculative only if all its supports are |
 | Synthetic | A support from a test-scenario source with `synthetic: true`; marked "推演" wherever the fact appears |
 
@@ -89,3 +96,4 @@ The v1 core loop is: **ingest sources → view the graph at any event time → r
 | 1.2.0 | v1 cut to F1–F6; Chinese-first; image/note sources; generic ontology and templates; DeepSeek; Scenarios A/B. |
 | 1.3.0 | Knowledge time removed from v1; decision records; English PRD split into this folder. |
 | 1.4.0 | Applied the independent review (Codex, verified against `graphiti-core` 0.31.2): causal capture via Graphiti's `invalidated_by`; invalidation write-back; `IG_FactSupport` evidence; chunk checkpoints and resume; `graph.changed` + snapshot refetch; image drafts; full P6 transitions; complete style/eligibility rules; Q&A request and stream contract; fixed Scenarios A and B; telemetry off, loopback ports, no APOC; reported-speech tier cap moved to backlog; CN parity and links fixed. |
+| 1.5.0 | **Selectable thinking level** (`off`/`low`/`medium`/`high`, default `off`): set per case for extraction and classification, and per question for Q&A (with an optional, unverified reasoning stream). Mapped by a provider profile and injected by the adapter. Provider facts verified during environment setup: DeepSeek supports `json_object` only; thinking is on by default and is disabled via `thinking: {type: disabled}`; Bailian's OpenAI-compatible path is `/compatible-mode/v1`; the embedder's native dimension must equal `EMBEDDING_DIM`; `httpx[socks]` is needed under SOCKS proxies. Setup moved to Homebrew Neo4j and a cloud embedder. |

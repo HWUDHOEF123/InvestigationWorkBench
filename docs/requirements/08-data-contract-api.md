@@ -13,9 +13,13 @@
 ## Snapshot
 
 ```ts
+type ThinkingLevel = 'off' | 'low' | 'medium' | 'high';
+
 type Snapshot = {
   case: { id: string; name: string; template: string; template_version: string; timezone: string;
-          time_mode: 'absolute' | 'story'; story_anchor_ts?: number };
+          time_mode: 'absolute' | 'story'; story_anchor_ts?: number;
+          settings: { thinking: { extraction: ThinkingLevel; classification: ThinkingLevel;
+                                  qa_default: ThinkingLevel } } };   // all default 'off'
   version: number;                                   // revision
   entities: Entity[]; facts: Fact[]; conflicts: Conflict[]; sources: Source[];
   layout: { version: number; positions: Record<string, { x: number; y: number }> };
@@ -91,7 +95,9 @@ All case-scoped resources are checked against the case in the path. A mutation r
 | Method & path | Purpose |
 | :--- | :--- |
 | `GET /templates` | Templates and their versions |
+| `GET /providers/llm` | `{model, thinking_levels: ThinkingLevel[]}`. An empty list means the provider has no thinking support, and the UI hides the selectors |
 | `POST /cases` · `GET /cases/{id}` | Create or read a case |
+| `PUT /cases/{id}/settings` | `{thinking: {extraction, classification, qa_default}}`. Applies to jobs started afterwards and writes a decision record |
 | `GET /cases/{id}/brief` · `PUT /cases/{id}/brief` | Case brief (versioned) |
 | `GET /cases/{id}/snapshot` | Latest effective graph. Supports `ETag` / `If-None-Match` |
 | `GET /cases/{id}/events` | SSE stream for the case (see below) |
@@ -107,7 +113,7 @@ All case-scoped resources are checked against the case in the path. A mutation r
 | `POST /conflicts/{id}/adjudicate` | P6 `{outcome \| "hold", note}` |
 | `POST /facts/{id}/closure` | Resolve an unconfirmed closure: `{action: "confirm" \| "revert", note?}` |
 | `POST /cases/{id}/merges` | `{alias_id, canonical_id, canonical_name?, version}` |
-| `POST /decisions/{id}/undo` | Undo any undoable decision: adjudication, closure action, tier change, merge, re-layout |
+| `POST /decisions/{id}/undo` | Undo any undoable decision: adjudication, closure action, tier change, merge, re-layout, settings change |
 | `GET /cases/{id}/decisions` | Audit log, filterable by object and type |
 | `POST /cases/{id}/qa` | Grounded Q&A (one-shot SSE response; see [F6](features/F6-grounded-qa.md)) |
 | `PUT /cases/{id}/layout` | `{positions, layout_version}` |
