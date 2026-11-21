@@ -53,7 +53,7 @@ SEMAPHORE_LIMIT=4                      # Graphiti's internal concurrency for LLM
 LLM_BASE_URL=https://api.deepseek.com
 LLM_API_KEY=
 LLM_MODEL=deepseek-flash               # Graphiti, vision and Q&A; this model was used in M0
-LLM_SMALL_MODEL=deepseek-flash         # IntelGraph P2 classification only
+LLM_SMALL_MODEL=deepseek-flash         # VeriTrace P2 classification only
 LLM_STRUCTURED_OUTPUT=json_object      # DeepSeek supports json_object only
 LLM_PROVIDER_PROFILE=deepseek          # maps thinking levels off/low/medium/high to request params
 

@@ -4,7 +4,7 @@
 
 ## Product
 
-**IntelGraph** is an investigation workbench for Chinese-speaking analysts. It turns fragmented, time-sensitive and contradictory material into a navigable, source-grounded case graph, built on **Graphiti** (temporal knowledge graph) and **Neo4j**. Case templates make it work across domains.
+**VeriTrace** is an investigation workbench for Chinese-speaking analysts. It turns fragmented, time-sensitive and contradictory material into a navigable, source-grounded case graph, built on **Graphiti** (temporal knowledge graph) and **Neo4j**. Case templates make it work across domains.
 
 **Core loop (v1):** ingest sources → see the graph at any event time → review contradictions → trace connections → ask grounded questions.
 
@@ -21,7 +21,7 @@ Whether the file is a due-diligence report, a homicide dossier or a mystery plot
 * **Event-time facts.** Each fact records when it was true: Graphiti's `valid_at` / `invalid_at`. Superseded facts become history and are never deleted, so the timeline can show the graph as of any moment.
 * **Reliability-aware contradiction review.**
   * When Graphiti closes a fact, it decides by date order and ignores the source.
-  * IntelGraph records which fact caused each closure and classifies the change.
+  * VeriTrace records which fact caused each closure and classifies the change.
   * It then applies tier rules and writes the corrected interval back. Genuine disagreements go to the analyst with a suggested winner.
   * Every policy decision and analyst action is recorded and can be undone.
 * **Deterministic structure, grounded generation.**

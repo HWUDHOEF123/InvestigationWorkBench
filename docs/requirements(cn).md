@@ -1,8 +1,8 @@
-# IntelGraph：时态知识图谱调查工作台
+# VeriTrace：时态知识图谱调查工作台
 
 > **版本 1.5.2-PRD** · 待实施草案 · 本文为中文阅读版。英文版按主题拆分在 [`requirements/`](requirements/README.md)，带索引，供 agent 按需读取；涉及标识符时以英文版为准，两份文档须同步更新。
 
-IntelGraph 是一款面向中文分析师的调查工作台，把碎片化、强时效、相互矛盾的材料整理成一张处处有出处的案件图谱。底层基于 **Graphiti**（`graphiti-core==0.31.2`）和 **Neo4j**。
+VeriTrace 是一款面向中文分析师的调查工作台，把碎片化、强时效、相互矛盾的材料整理成一张处处有出处的案件图谱。底层基于 **Graphiti**（`graphiti-core==0.31.2`）和 **Neo4j**。
 
 v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → 审阅矛盾 → 追踪路径 → 有据提问。**
 
@@ -21,7 +21,7 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
 
 ## 关键约束
 
-1. **数据归属。** 实体、边和 Episode 归 Graphiti 所有；IntelGraph 自己的状态存放在 `IG_*` 节点中，以 Graphiti 的 UUID 作为关联键。**唯一的例外：** 策略推翻 Graphiti 的判定，或落实一条陈述终点时，Graphiti 适配层可以把边上的 `invalid_at` / `expired_at` 写回 Graphiti。写回时原值记入决策记录，撤销时还原。除此之外，不写 Graphiti 的任何数据。
+1. **数据归属。** 实体、边和 Episode 归 Graphiti 所有；VeriTrace 自己的状态存放在 `IG_*` 节点中，以 Graphiti 的 UUID 作为关联键。**唯一的例外：** 策略推翻 Graphiti 的判定，或落实一条陈述终点时，Graphiti 适配层可以把边上的 `invalid_at` / `expired_at` 写回 Graphiti。写回时原值记入决策记录，撤销时还原。除此之外，不写 Graphiti 的任何数据。
 2. **v1 只用事件时间。** 事件时间即 Graphiti 的 `valid_at` / `invalid_at`，区间为左闭右开 `[valid_at, invalid_at)`；`reference_time` 是文档日期。认知时间不在 v1 范围内。
 3. **Graphiti 只按日期先后让事实失效。** P1–P4 依据信源等级修正这一点。**v1 从不自动裁决**，只给出建议。
 4. **串行导入。** 一次只处理一个切块；每个切块有一个两阶段检查点：P1 捕获在 Graphiti 写入之前**暂存**，策略执行完毕后标记为**完成**。该切块的策略执行完毕后才发布新的案件版本；客户端收到 `graph.changed` 后重新拉取快照。
@@ -75,7 +75,7 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
 * **基于事件时间的事实。** 被取代的事实转为历史，不删除；时间轴可以展示任意时刻的图谱。
 * **考虑可靠度的矛盾审阅。**
   * Graphiti 只按日期先后让事实失效，不看信源。
-  * IntelGraph 记录每次失效是由哪条事实引起的，并判断它属于哪类变化。
+  * VeriTrace 记录每次失效是由哪条事实引起的，并判断它属于哪类变化。
   * 然后套用分级规则，把修正后的时间区间写回 Graphiti。真正的说法分歧附上建议，交给分析师裁决。
   * 所有策略决定和分析师操作都有记录，均可撤销。
 * **结构计算确定，生成有据可查。** 时间轴和路径是纯图计算；每条事实都关联到支撑信源，AI 的判断必须引用事实。
@@ -140,20 +140,20 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
 
 | 对象 | 含义 | 归属 |
 | :--- | :--- | :--- |
-| Case | 模板及其版本、时区、带版本的案件指引、可选的故事锚点，以及案件设置（抽取、分类、问答默认值三项思考强度，默认都是 `off`）；对应 `group_id` | IntelGraph |
-| Source | 等级、`reference_time`、可选发言人、各类标记 | IntelGraph |
-| Chunk | 对规范化文本确定性切分出的片段，带字符偏移和两阶段检查点：**暂存**（P1 捕获在 Graphiti 写入之前持久化）与**完成**（策略已执行完毕，可以发布版本）；见 F1 | IntelGraph |
+| Case | 模板及其版本、时区、带版本的案件指引、可选的故事锚点，以及案件设置（抽取、分类、问答默认值三项思考强度，默认都是 `off`）；对应 `group_id` | VeriTrace |
+| Source | 等级、`reference_time`、可选发言人、各类标记 | VeriTrace |
+| Chunk | 对规范化文本确定性切分出的片段，带字符偏移和两阶段检查点：**暂存**（P1 捕获在 Graphiti 写入之前持久化）与**完成**（策略已执行完毕，可以发布版本）；见 F1 | VeriTrace |
 | Episode | 一个切块对应的 Graphiti `EpisodicNode`，命名为 `{source_id}:{chunk_index}`，其 `valid_at` 等于信源的 `reference_time` | Graphiti |
 | Entity | Graphiti `EntityNode` | Graphiti（+ 合并投影） |
 | Fact | Graphiti `EntityEdge`：关系名、中文 `fact`、`valid_at`/`invalid_at`、`episodes`、`attributes` | Graphiti |
-| Support | `IG_FactSupport`：每当某个 Episode 新建一条事实、或作为重复项再次确认它时，就生成一条，带信源等级、推测/推演标记和自动定位的摘录；信源对该论断明确写出结束时间时，还带 `stated_end`（见六 P1） | IntelGraph |
-| Conflict | 类型、建议、状态、裁决历史 | IntelGraph |
-| 决策记录 | 失效的保留/写回、陈述终点的落实/转入待确认/确认/驳回、裁决、合并、等级调整、跳过审阅、撤销；存储变更前后的值 | IntelGraph |
-| Revision | 每个切块的策略执行完后发布一次，每次分析师修改后也发布一次 | IntelGraph |
+| Support | `IG_FactSupport`：每当某个 Episode 新建一条事实、或作为重复项再次确认它时，就生成一条，带信源等级、推测/推演标记和自动定位的摘录；信源对该论断明确写出结束时间时，还带 `stated_end`（见六 P1） | VeriTrace |
+| Conflict | 类型、建议、状态、裁决历史 | VeriTrace |
+| 决策记录 | 失效的保留/写回、陈述终点的落实/转入待确认/确认/驳回、裁决、合并、等级调整、跳过审阅、撤销；存储变更前后的值 | VeriTrace |
+| Revision | 每个切块的策略执行完后发布一次，每次分析师修改后也发布一次 | VeriTrace |
 
 ### 3.2 归属与写回
 
-* **IntelGraph 的节点**存放在同一个 Neo4j 库中，以 Graphiti 的 UUID 关联：
+* **VeriTrace 的节点**存放在同一个 Neo4j 库中，以 Graphiti 的 UUID 关联：
   * `IG_Case`、`IG_Source`、`IG_Chunk`
   * `IG_ImageDraft`
   * `IG_FactSupport`
@@ -163,7 +163,7 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
   * `IG_Decision`
 * **唯一的写回。** P3 或 P6 推翻 Graphiti 的失效判定，或落实一条陈述终点时，由适配层把 `invalid_at`/`expired_at` 写回 Graphiti 的边；原值存入决策记录，撤销时还原。
 * **为什么要写回。** Graphiti 后续的矛盾判断从数据库读取这两个字段，它看不到覆盖层；写回后，它的判断才能与分析师看到的状态一致。
-* **其余字段只读。** Graphiti 的其他属性对 IntelGraph 一律只读。
+* **其余字段只读。** Graphiti 的其他属性对 VeriTrace 一律只读。
 * **快照构建器**把 Graphiti 数据与合并、支撑、冲突、标记组合成某个版本的有效图，并缓存起来，供快照接口和问答共用。
 
 ### 3.3 本体
@@ -583,7 +583,7 @@ graph TD
 * **Graphiti 的 LLM。** 配置为 `OpenAIGenericClient(config=LLMConfig(api_key=…, base_url=…, model=…), structured_output_mode="json_object")`。
   * **必须用 `json_object`**：DeepSeek 的 Chat Completions 只支持 `text` 和 `json_object`，没有 `json_schema`。
   * **Graphiti 只用一个模型**：这个客户端不会把请求分流给 `small_model`。
-  * IntelGraph 自己的调用走 OpenAI SDK，其中 P2 分类可以使用 `LLM_SMALL_MODEL`。
+  * VeriTrace 自己的调用走 OpenAI SDK，其中 P2 分类可以使用 `LLM_SMALL_MODEL`。
   * **类型化属性必须归一化。** `json_object` 模式下，Graphiti 会把原始 JSON Schema 直接贴进提示词；DeepSeek 随后常把属性值再包一层 `properties`（或 `attributes`，或类型名）。Graphiti 会保留未声明的键，于是这层嵌套映射进了 Neo4j，整个 Episode 随之回滚。
     * 适配层重写 `generate_response`，对属性抽取调用解开这样的一层嵌套。
     * 只保留通过严格校验的已声明字段。
@@ -619,7 +619,7 @@ graph TD
   * 要用 OpenAI 兼容路径 `/compatible-mode/v1`，不要用 DashScope 原生的 `/api/v1`。
   * Graphiti 不会发送 `dimensions` 参数，而是把向量截断成 `EMBEDDING_DIM` 维，所以模型的**原生**输出维度必须等于 `EMBEDDING_DIM`。
   * 模型和维度都要固定。
-* **重排序。** 注入一个保持原有顺序的 `CrossEncoderClient` 桩实现，这样就不需要 OpenAI 密钥。IntelGraph 不使用 Graphiti 的检索打分。`Graphiti.search()` 从不调用这个桩，所以冒烟测试用带重排序配方的 `search_()`。
+* **重排序。** 注入一个保持原有顺序的 `CrossEncoderClient` 桩实现，这样就不需要 OpenAI 密钥。VeriTrace 不使用 Graphiti 的检索打分。`Graphiti.search()` 从不调用这个桩，所以冒烟测试用带重排序配方的 `search_()`。
 * **摘录定位。** 每个切块处理完后，`policy` 把切块中的句子各生成一次向量；每条新支撑取与事实描述最接近的那句作为摘录（`located: "auto"`）。没有句子超过阈值时，退回整个切块（`located: "none"`）。这一步不调用 LLM。
 * **全文检索。** 沿用 Graphiti 的默认分析器。两套 M0 试验都未发现 `cjk` 提升召回，其中 30 条中文查询的 recall@10 和 MRR 与默认分析器相同。用 `IF NOT EXISTS` 创建具名索引，保留已有的共享索引。
 * **遥测。** Graphiti 默认开启遥测。必须在引入 Graphiti 之前设置 `GRAPHITI_TELEMETRY_ENABLED=false`。验收检查要在普通进程中执行：Graphiti 在 pytest 下会强制关闭遥测，可能掩盖漏配。
@@ -1198,7 +1198,7 @@ SEMAPHORE_LIMIT=4                      # Graphiti 内部 LLM、向量、检索�
 LLM_BASE_URL=https://api.deepseek.com
 LLM_API_KEY=
 LLM_MODEL=deepseek-flash               # 用于 Graphiti、视觉、问答；M0 使用此模型
-LLM_SMALL_MODEL=deepseek-flash         # 仅用于 IntelGraph 的 P2 分类
+LLM_SMALL_MODEL=deepseek-flash         # 仅用于 VeriTrace 的 P2 分类
 LLM_STRUCTURED_OUTPUT=json_object      # DeepSeek 只支持 json_object
 LLM_PROVIDER_PROFILE=deepseek          # 把思考强度 off/low/medium/high 映射为请求参数
 
@@ -1308,4 +1308,4 @@ pnpm install && pnpm dev                                    # http://127.0.0.1:5
 | 1.5.1 | **P3 复核**：P3 自动保留的 `CHANGE` 失效判定，在任何一方的最佳等级变化时重新检查；不再合规时写回，并开为 `contested_change`。只在一个方向上自动处理：等级变化从不自动让事实失效。**事实起点**（`display_valid_at_ts`，永不为空）在 5.4 统一定义，时间轴、路径、问答共用。新增并行 worktree 环境说明。 |
 | 1.5.2 | 新增陈述终点、两阶段检查点和 `contracts` / `overlay` 模块。纳入 M0 验证的适配约定，A5 验收固定为案件本地午夜。见六、F1、七和十二。 |
 
-**IntelGraph Development Team** | *Version 1.5.2-PRD* | *License: MIT*
+**VeriTrace Development Team** | *Version 1.5.2-PRD* | *License: MIT*

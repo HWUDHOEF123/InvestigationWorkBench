@@ -1,8 +1,8 @@
-# IntelGraph Requirements — Index
+# VeriTrace Requirements — Index
 
 > **Version 1.5.2-PRD** · Draft for implementation · Chinese reading copy: [`../requirements(cn).md`](<../requirements(cn).md>) (keep in sync; these English files are canonical for identifiers)
 
-IntelGraph is a Chinese-language investigation workbench. It turns fragmented, time-sensitive, contradictory material into a source-grounded case graph on **Graphiti** (`graphiti-core==0.31.2`) and **Neo4j**.
+VeriTrace is a Chinese-language investigation workbench. It turns fragmented, time-sensitive, contradictory material into a source-grounded case graph on **Graphiti** (`graphiti-core==0.31.2`) and **Neo4j**.
 
 The v1 core loop is: **ingest sources → view the graph at any event time → review contradictions → trace paths → ask grounded questions.**
 
@@ -49,7 +49,7 @@ Use the stable IDs in code, tests and commits.
 
 ## Key invariants
 
-1. **Ownership.** Graphiti owns entities, edges and episodes. IntelGraph state lives in `IG_*` nodes keyed by Graphiti UUIDs. **Single exception:** the Graphiti adapter may write back `invalid_at` / `expired_at` on an edge when the policy overrides Graphiti or applies a stated end. It records the original values in a decision record and restores them on undo. Nothing else writes to Graphiti data. → 03, 06
+1. **Ownership.** Graphiti owns entities, edges and episodes. VeriTrace state lives in `IG_*` nodes keyed by Graphiti UUIDs. **Single exception:** the Graphiti adapter may write back `invalid_at` / `expired_at` on an edge when the policy overrides Graphiti or applies a stated end. It records the original values in a decision record and restores them on undo. Nothing else writes to Graphiti data. → 03, 06
 2. **Event time only in v1.** Facts use Graphiti `valid_at` / `invalid_at` (half-open `[valid_at, invalid_at)`), and `reference_time` is the document date. Knowledge time is out of v1. → 05
 3. **Graphiti closes facts by date order only.** P1–P4 correct this using source tiers. **v1 never auto-resolves conflicts**; it only suggests a winner. → 06
 4. **Serialized ingestion.** One chunk is processed at a time. Each chunk has a two-phase checkpoint: the P1 capture is staged before Graphiti writes, and the chunk is marked complete after the policy. A new case revision is published only after the policy has finished for that chunk. Clients refetch the snapshot on `graph.changed`. → 07, F1
