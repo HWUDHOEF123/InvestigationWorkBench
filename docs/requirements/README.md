@@ -1,6 +1,6 @@
 # IntelGraph Requirements — Index
 
-> **Version 1.5.1-PRD** · Draft for implementation · Chinese reading copy: [`../requirements(cn).md`](<../requirements(cn).md>) (keep in sync; these English files are canonical for identifiers)
+> **Version 1.5.2-PRD** · Draft for implementation · Chinese reading copy: [`../requirements(cn).md`](<../requirements(cn).md>) (keep in sync; these English files are canonical for identifiers)
 
 IntelGraph is a Chinese-language investigation workbench. It turns fragmented, time-sensitive, contradictory material into a source-grounded case graph on **Graphiti** (`graphiti-core==0.31.2`) and **Neo4j**.
 
@@ -45,10 +45,10 @@ The v1 core loop is: **ingest sources → view the graph at any event time → r
 
 ## Key invariants
 
-1. **Ownership.** Graphiti owns entities, edges and episodes. IntelGraph state lives in `IG_*` nodes keyed by Graphiti UUIDs. **Single exception:** the Graphiti adapter may write back `invalid_at` / `expired_at` on an edge when the policy overrides Graphiti. It records the original values in a decision record and restores them on undo. Nothing else writes to Graphiti data. → 03, 06
+1. **Ownership.** Graphiti owns entities, edges and episodes. IntelGraph state lives in `IG_*` nodes keyed by Graphiti UUIDs. **Single exception:** the Graphiti adapter may write back `invalid_at` / `expired_at` on an edge when the policy overrides Graphiti or applies a stated end. It records the original values in a decision record and restores them on undo. Nothing else writes to Graphiti data. → 03, 06
 2. **Event time only in v1.** Facts use Graphiti `valid_at` / `invalid_at` (half-open `[valid_at, invalid_at)`), and `reference_time` is the document date. Knowledge time is out of v1. → 05
 3. **Graphiti closes facts by date order only.** P1–P4 correct this using source tiers. **v1 never auto-resolves conflicts**; it only suggests a winner. → 06
-4. **Serialized ingestion.** One chunk is processed at a time. A new case revision is published only after the policy has finished for that chunk. Clients refetch the snapshot on `graph.changed`. → 07, F1
+4. **Serialized ingestion.** One chunk is processed at a time. Each chunk has a two-phase checkpoint: the P1 capture is staged before Graphiti writes, and the chunk is marked complete after the policy. A new case revision is published only after the policy has finished for that chunk. Clients refetch the snapshot on `graph.changed`. → 07, F1
 5. **Timeline and paths run in the frontend** on the in-memory snapshot. No server calls are made while scrubbing. → F3, F5
 6. **Every fact links to its supporting sources** (`IG_FactSupport`). Excerpts are located automatically and labelled as such, with the whole chunk as fallback. Q&A citations are validated. → 03, F6
 7. **Language.** UI and generated content are in Simplified Chinese. Code, fields, enums and relation types are in English. Entity names keep their native form, with aliases (`Jensen Huang（黄仁勋）`). The adapter overrides Graphiti's "same language as source" instruction. → 01, 07
@@ -83,6 +83,8 @@ The v1 core loop is: **ingest sources → view the graph at any event time → r
 | Event time | When a fact was true: `[valid_at, invalid_at)` |
 | Story time | Event time on a synthetic calendar ("第1天 21:00") |
 | Closure | Graphiti setting `invalid_at` on a fact |
+| Stated end | An end that a source states for a claim ("X 已于 D 卸任"), captured by P1 and applied or queued for review by P3 |
+| Claim key | The typed attributes that identify the same claim within a relation, e.g. `role` for `AFFILIATED_WITH`; defined per template |
 | Write-back | The adapter changing `invalid_at`/`expired_at` on a Graphiti edge to apply a policy decision |
 | Conflict | A recorded contradiction (`disagreement` or `contested_change`) with a suggestion and resolution |
 | Decision record | Append-only audit entry for every policy decision and analyst action; the basis for undo |
@@ -104,3 +106,4 @@ The v1 core loop is: **ingest sources → view the graph at any event time → r
 | 1.4.0 | Applied the independent review (Codex, verified against `graphiti-core` 0.31.2): causal capture via Graphiti's `invalidated_by`; invalidation write-back; `IG_FactSupport` evidence; chunk checkpoints and resume; `graph.changed` + snapshot refetch; image drafts; full P6 transitions; complete style/eligibility rules; Q&A request and stream contract; fixed Scenarios A and B; telemetry off, loopback ports, no APOC; reported-speech tier cap moved to backlog; CN parity and links fixed. |
 | 1.5.0 | **Selectable thinking level** (`off`/`low`/`medium`/`high`, default `off`): set per case for extraction and classification, and per question for Q&A (with an optional, unverified reasoning stream). Mapped by a provider profile and injected by the adapter. Provider facts verified during environment setup: DeepSeek supports `json_object` only; thinking is on by default and is disabled via `thinking: {type: disabled}`; Bailian's OpenAI-compatible path is `/compatible-mode/v1`; the embedder's native dimension must equal `EMBEDDING_DIM`; `httpx[socks]` is needed under SOCKS proxies. Setup moved to Homebrew Neo4j and a cloud embedder. |
 | 1.5.1 | **P3 re-check:** an automatically kept `CHANGE` closure is re-checked whenever either side's best tier changes. If the closure no longer complies, it is written back and opened as `contested_change`. This works in one direction only: a tier change never auto-closes anything. **Fact start** (`display_valid_at_ts`, never null) is defined once in 05 and used by the timeline, paths and Q&A. Parallel-worktree setup. |
+| 1.5.2 | **Applied the M0 spike findings** ([report](../spikes/m0-report.md)). **P3 stated ends:** P1 captures ends that a source states (Graphiti drops them on dedupe and closes nothing for a same-start restatement). P3 applies them to the unique matching open fact when the source is at least as reliable, and otherwise sets `end_claimed` for review (*确认结束* / *驳回*). **Two-phase chunk checkpoint:** a staged capture before Graphiti writes, completion before publish; replay requires an episode-UUID match. **Integration:** mandatory typed-attribute normalization (schema echo); naming policy, known aliases and case offset passed as `custom_extraction_instructions`; date-only times normalized to case-local midnight; capture-hook placement; omitted-scope behaviour and the case ID format; keep the default full-text analyzer; vision all-or-nothing retry; telemetry check outside pytest. **Acceptance:** A5 pinned to the case-local D+14 instant; A1, A2 and B3 wording made precise. **Modules:** `contracts` (shared models) and `overlay` (`IG_*` repositories) added to 07/13. |

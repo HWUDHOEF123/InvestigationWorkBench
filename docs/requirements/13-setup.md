@@ -2,6 +2,8 @@
 
 > Index: [README](README.md) · Depends on: [07](07-architecture.md)
 
+`main` provides the specification. Start implementation branches from `develop`, which includes dependency locks, `backend/.env.example`, and the environment self-check. Keep real provider keys and Neo4j credentials in the ignored local `.env`.
+
 ## Requirements
 
 * **Python ≥ 3.11.** `backend/requirements.in` lists the top-level dependencies, and `backend/requirements.txt` is the uv-compiled lock.
@@ -19,10 +21,10 @@
   * Embedded text, i.e. entity names and fact text, is sent to this provider. The UI's recipient indicator shows it.
 * **Proxies.** HTTP and SOCKS proxies set in the environment (`HTTP(S)_PROXY`, `ALL_PROXY`) are honoured, and `NO_PROXY` should include `127.0.0.1` and `localhost` so that Neo4j and the API stay direct.
 
-## Repository layout
+## Target repository layout
 
 ```text
-backend/app/        api/ intake/ graph/ policy/ snapshot/ qa/ templates/
+backend/app/        api/ contracts/ intake/ graph/ overlay/ policy/ snapshot/ qa/ templates/
 backend/app/config.py  settings resolution (shared by app and scripts)
 backend/scripts/    bootstrap_worktree.sh · check_env.py · seed_case.py · drop_source.py · export_snapshot.py   (scenario scripts call the running API)
 backend/requirements.in · requirements.txt · .env.example
@@ -50,7 +52,7 @@ SEMAPHORE_LIMIT=4                      # Graphiti's internal concurrency for LLM
 # LLM (OpenAI-compatible)
 LLM_BASE_URL=https://api.deepseek.com
 LLM_API_KEY=
-LLM_MODEL=deepseek-flash               # Graphiti, vision and Q&A; confirm the exact ID in M0
+LLM_MODEL=deepseek-flash               # Graphiti, vision and Q&A; this model was used in M0
 LLM_SMALL_MODEL=deepseek-flash         # IntelGraph P2 classification only
 LLM_STRUCTURED_OUTPUT=json_object      # DeepSeek supports json_object only
 LLM_PROVIDER_PROFILE=deepseek          # maps thinking levels off/low/medium/high to request params
@@ -115,6 +117,8 @@ Several git worktrees can run side by side and share one Neo4j instance and one 
 **Index readiness.** On startup, the backend builds Graphiti's indices and constraints, then waits on `CALL db.awaitIndexes()`, and only then accepts traffic.
 
 ## Running
+
+These commands describe the planned app once its entry points are available. The current `develop` baseline supports environment setup and self-check. Frontend work can start with a hand-written snapshot following [08](08-data-contract-api.md).
 
 **Terminal 1 — backend** (in `backend/`):
 

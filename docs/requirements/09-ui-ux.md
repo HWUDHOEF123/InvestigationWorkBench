@@ -60,6 +60,7 @@ Exactly one line style applies to each fact. It is the first row that matches.
 * the tier badge (`T1`–`T3`);
 * **推演** when `synthetic`;
 * **⚠失效待确认** when `closure_unconfirmed`;
+* **⚠结束待确认** when `end_claimed`;
 * **≈** on dates when `valid_at_inferred`.
 
 A refuted or disputed fact that is also expired keeps its refuted or disputed style, and its label adds "（历史）".
