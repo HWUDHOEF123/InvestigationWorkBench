@@ -2,6 +2,10 @@
 
 > Index: [README](README.md) · Depends on: [04](04-sources-and-tiers.md), [05](05-time-and-fact-states.md), [06](06-contradiction-policy.md) · Fixtures: `fixtures/nvidia/`, `fixtures/rainy_manor/`
 
+## Acceptance baseline
+
+M0 used Graphiti 0.31.2, Neo4j 2026.10.2, DeepSeek `deepseek-flash`, and Bailian `qwen3.7-text-embedding`. A scripted model verified causal capture, write-back, and the next Graphiti read. Live extraction can still miss or pick the wrong contradiction candidate. Verify A1–A3 and the backend part of A5 through the API for M1, using the v1.5.2 fixture dates below.
+
 ## Scenario A — Nvidia: leadership, regulation and the AI-chip contest (`corporate_intel`)
 
 The frozen scenario uses real companies and people. S0–S3 are public background, and S4–S7 are explicitly marked synthetic.

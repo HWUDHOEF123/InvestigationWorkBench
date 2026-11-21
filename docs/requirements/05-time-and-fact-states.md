@@ -23,7 +23,7 @@ Graphiti's detection is bounded and best-effort. Do not treat it as complete:
   * the two facts have equal or null starts;
   * the facts do not overlap;
   * the candidate already has an end on or before the new fact's start.
-* **The extracted start decides.** A source that restates an existing fact with an end ("X 已于 D 卸任 CEO") is often extracted as the old fact with the *same* start plus an explicit end. Graphiti then closes nothing. If dedupe instead merges it into the existing fact, the stated end is dropped. P1 captures such stated ends, and P3 applies them ([06](06-contradiction-policy.md)). Verified in M0 ([spike report](../spikes/m0-report.md)).
+* **The extracted start decides.** A source that restates an existing fact with an end ("X 已于 D 卸任 CEO") is often extracted as the old fact with the *same* start plus an explicit end. Graphiti then closes nothing. If dedupe instead merges it into the existing fact, the stated end is dropped. P1 captures such stated ends, and P3 applies them under the match and tier rules. [06](06-contradiction-policy.md)
 * **Backfill.** An older document ingested later can close *its own* new fact against an existing one that starts later.
 * **Order sensitivity.** Results can vary with ingestion order and recent-episode context. Identical graphs are not guaranteed.
 

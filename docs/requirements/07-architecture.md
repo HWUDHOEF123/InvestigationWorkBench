@@ -78,7 +78,7 @@ graph TD
 | Timeline and paths run in the frontend | The case fits in memory, and both use the same time semantics. |
 | Vision runs before Graphiti | Graphiti's ingestion API is text-only. |
 
-## Integration notes (verified in M0; see the [spike report](../spikes/m0-report.md))
+## Integration requirements
 
 * **Graphiti LLM.** Configure it as follows:
 
@@ -109,7 +109,7 @@ graph TD
   * A profile can declare that it has no thinking support. The UI then hides the selectors.
   * Graphiti's `OpenAIGenericClient` sends neither parameter. The adapter subclasses it and injects `extra_body` from the running job's extraction level.
   * In thinking mode the provider ignores `temperature`, so results vary more.
-  * Extraction under any level other than `off` must keep producing valid `json_object` output. This is verified per level in M0.
+  * Validate `json_object` output at every level. All four levels produced valid output in M0, with one independent `medium` extraction recovering from a parse error on retry.
   * Vision transcription always runs with `off`.
 * **Language.** Graphiti appends a "use the same language as the source" instruction: the module-level `get_extraction_language_instruction`, called from `openai_generic_client.py`. The adapter replaces that suffix at request time through a per-instance SDK hook, so that fact text and summaries are zh-CN while entity names keep their native form.
   * The hook raises if the suffix no longer matches, so a Graphiti upgrade fails loudly.
@@ -129,7 +129,7 @@ graph TD
   * Pin both the model and the dimension.
 * **Cross-encoder.** Inject an order-preserving stub that implements `CrossEncoderClient`. This means no OpenAI key is needed. IntelGraph does not use Graphiti's search scoring. `Graphiti.search()` never calls the stub, so the smoke test uses `search_()` with a cross-encoder recipe.
 * **Excerpt location.** After each chunk, `policy` embeds the chunk's sentences once. For each new support, the sentence nearest to the fact text becomes the excerpt (`located: "auto"`). If no sentence passes the threshold, the whole chunk is used (`located: "none"`). No LLM call is involved.
-* **Full-text search.** Keep Graphiti's default analyzer. In M0, `cjk` gave identical recall@10 and MRR on 30 Chinese queries and only narrowed the candidates. The named indexes are never altered: they are created `IF NOT EXISTS`, and the Neo4j instance is shared.
+* **Full-text search.** Keep Graphiti's default analyzer. Neither M0 trial found a recall gain from `cjk`. The 30-query comparison returned the same recall@10 and MRR with both analyzers. Create named indexes with `IF NOT EXISTS` and leave existing shared indexes in place.
 * **Telemetry.** Graphiti telemetry is on by default. Set `GRAPHITI_TELEMETRY_ENABLED=false` before Graphiti is imported. Run the acceptance check in a normal process: Graphiti forces telemetry off under pytest, which would mask a missing setting.
 * **Case isolation.** Every adapter call passes `group_id` explicitly, and the adapter rejects any call without one. Every API resource is scoped to and checked against its case.
   * Graphiti treats an omitted scope differently by operation. `add_episode` writes to the default group `''`. `search` reads **all** groups, including for `[]` and `[""]`.
