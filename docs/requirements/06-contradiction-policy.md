@@ -13,7 +13,7 @@ The policy restores source reliability and routes genuine disagreements to the a
 
 ## When rules run
 
-* **P1–P4** run automatically, in order, after every chunk's `add_episode` and before the revision is published.
+* **P1** captures during the chunk's `add_episode`. **P2–P4** run before the revision is published.
 * **P3 re-check and P4** also run whenever either side's best tier changes: a tier edit, a new support added during ingestion, or a change to a speculative flag. **P4** also re-runs after a merge.
 * **P3 stated ends** run after the closure rows of P3, in the same chunk.
 * **P5–P6** are analyst actions.
@@ -39,7 +39,7 @@ This yields exact pairs: *closed fact → the new fact(s) that closed it*. Self-
 
 The end is kept on the resulting support as `stated_end` ([03](03-domain-model.md)). P3 applies it.
 
-**Durability.** The adapter records each closed fact's pre-chunk `invalid_at` / `expired_at`, which write-back and undo need. For a self-closed fact it records the values from before the temporal step. The adapter persists these values, the causal map and the stated ends as the chunk's **staged** checkpoint *before* Graphiti writes, so that a crash after Graphiti's commit loses nothing ([F1](features/F1-source-intake.md)).
+**Durability.** A committed episode alone cannot recover the causal map or the prior edge timestamps. For write-back and undo, the adapter records each closed fact's pre-chunk `invalid_at` / `expired_at`. For a self-closed fact it records the values from before the temporal step. Before Graphiti writes, the adapter persists these values, the causal map and the stated ends in the chunk's **staged** checkpoint. [F1](features/F1-source-intake.md)
 
 The hook is pinned to the Graphiti version, and a contract test runs on every upgrade ([11](11-verification.md)).
 

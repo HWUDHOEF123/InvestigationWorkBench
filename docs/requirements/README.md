@@ -6,17 +6,21 @@ IntelGraph is a Chinese-language investigation workbench. It turns fragmented, t
 
 The v1 core loop is: **ingest sources → view the graph at any event time → review contradictions → trace paths → ask grounded questions.**
 
-## How to use these docs (for agents)
+## Start here
 
-1. Read this index first. The **Key invariants** and **Glossary** cover most tasks.
-2. Open only the files relevant to the task (see *Read when…* in the table below). Each file states what it depends on.
-3. IDs are stable; cite them in code, tests and commits:
-   - Features: `F1`–`F6`
-   - Policy rules: `P1`–`P6`. `P1`–`P4` run automatically after each chunk; `P5`–`P6` are analyst actions.
-   - Scenario assertions: `A1`–`A7`, `B1`–`B3`
-   - Milestones: `M0`–`M3`
+Use `develop` as the base for implementation branches. Read the key invariants below, then start with the chapters for your task.
 
-   All F1–F6 are in v1, so there is no separate priority label.
+| Task | Read first |
+| :--- | :--- |
+| Backend | Environment and self-check, module boundaries, then the API contract. For ingestion and policy work, read F1 and 06 as well. [13](13-setup.md) · [07](07-architecture.md) · [08](08-data-contract-api.md) · [F1](features/F1-source-intake.md) · [06](06-contradiction-policy.md) |
+| Frontend | Start with a hand-written snapshot for fixture mode. Follow the API contract, UI rules and the relevant F2–F6 spec. [08](08-data-contract-api.md) · [09](09-ui-ux.md) |
+| Verification | Use the frozen scenarios and their assertions. Check the exit criteria for the milestone under test. [11](11-verification.md) · [12](12-delivery-and-risks.md) |
+
+Use the stable IDs in code, tests and commits.
+- Features `F1`–`F6` are all in v1.
+- Policy rules `P1`–`P6`. P1 captures during ingestion, P2–P4 run before publication, and P5–P6 are analyst actions.
+- Scenario assertions `A1`–`A7` and `B1`–`B3`.
+- Milestones `M0`–`M3`.
 
 ## Files
 
@@ -106,4 +110,4 @@ The v1 core loop is: **ingest sources → view the graph at any event time → r
 | 1.4.0 | Applied the independent review (Codex, verified against `graphiti-core` 0.31.2): causal capture via Graphiti's `invalidated_by`; invalidation write-back; `IG_FactSupport` evidence; chunk checkpoints and resume; `graph.changed` + snapshot refetch; image drafts; full P6 transitions; complete style/eligibility rules; Q&A request and stream contract; fixed Scenarios A and B; telemetry off, loopback ports, no APOC; reported-speech tier cap moved to backlog; CN parity and links fixed. |
 | 1.5.0 | **Selectable thinking level** (`off`/`low`/`medium`/`high`, default `off`): set per case for extraction and classification, and per question for Q&A (with an optional, unverified reasoning stream). Mapped by a provider profile and injected by the adapter. Provider facts verified during environment setup: DeepSeek supports `json_object` only; thinking is on by default and is disabled via `thinking: {type: disabled}`; Bailian's OpenAI-compatible path is `/compatible-mode/v1`; the embedder's native dimension must equal `EMBEDDING_DIM`; `httpx[socks]` is needed under SOCKS proxies. Setup moved to Homebrew Neo4j and a cloud embedder. |
 | 1.5.1 | **P3 re-check:** an automatically kept `CHANGE` closure is re-checked whenever either side's best tier changes. If the closure no longer complies, it is written back and opened as `contested_change`. This works in one direction only: a tier change never auto-closes anything. **Fact start** (`display_valid_at_ts`, never null) is defined once in 05 and used by the timeline, paths and Q&A. Parallel-worktree setup. |
-| 1.5.2 | **Applied the M0 spike findings** ([report](../spikes/m0-report.md)). **P3 stated ends:** P1 captures ends that a source states (Graphiti drops them on dedupe and closes nothing for a same-start restatement). P3 applies them to the unique matching open fact when the source is at least as reliable, and otherwise sets `end_claimed` for review (*确认结束* / *驳回*). **Two-phase chunk checkpoint:** a staged capture before Graphiti writes, completion before publish; replay requires an episode-UUID match. **Integration:** mandatory typed-attribute normalization (schema echo); naming policy, known aliases and case offset passed as `custom_extraction_instructions`; date-only times normalized to case-local midnight; capture-hook placement; omitted-scope behaviour and the case ID format; keep the default full-text analyzer; vision all-or-nothing retry; telemetry check outside pytest. **Acceptance:** A5 pinned to the case-local D+14 instant; A1, A2 and B3 wording made precise. **Modules:** `contracts` (shared models) and `overlay` (`IG_*` repositories) added to 07/13. |
+| 1.5.2 | Added stated-end handling, two-phase checkpoints, and the `contracts` and `overlay` modules. Adopted the adapter requirements verified in M0 and fixed the A5 acceptance time to case-local midnight. [06](06-contradiction-policy.md) · [F1](features/F1-source-intake.md) · [07](07-architecture.md) · [11](11-verification.md) |

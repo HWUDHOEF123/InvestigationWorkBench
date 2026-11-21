@@ -6,9 +6,9 @@ IntelGraph 把碎片化、强时效、相互矛盾的材料整理成一张处处
 
 [中文需求文档](<docs/requirements(cn).md>) · [Requirements (EN)](docs/requirements/README.md)
 
-> `main` 与 `develop` 共用 v1.5.2 需求。`main` 提供需求文档，`develop` 还提供后端环境脚手架。M0 技术验证已完成，M1 后端正在并行开发。 [M0 技术验证摘要](docs/spikes/m0-report.md)
+> `main` 与 `develop` 共用 v1.5.2 需求。`main` 提供需求文档，`develop` 还提供后端环境脚手架。M0 的结论已纳入需求，M1 后端正在并行开发。
 
-从 `develop` 创建开发分支。后端可先按[环境指南](docs/requirements/13-setup.md)配置和自检。前端可按[数据契约](docs/requirements/08-data-contract-api.md)和 `fixture` 模式设计，用手写样例并行开发。FastAPI 和前端的启动命令要等对应入口合入后才能使用。
+从 `develop` 创建开发分支，按任务选择要读的章节。 [开发阅读顺序](docs/requirements/README.md#start-here)
 
 ---
 
@@ -60,7 +60,7 @@ graph LR
 
 - [x] 需求文档 v1.5.2：已纳入 M0 验证结果和双语 API 契约修正
 - [x] 开发环境：Homebrew Neo4j、DeepSeek、阿里百炼向量模型、并行 worktree 支持（`develop` 分支）
-- [x] **M0** 技术验证：DeepSeek 兼容性、中文抽取、Graphiti 钩子、故障恢复；冻结测试数据（[报告](docs/spikes/m0-report.md)）
+- [x] **M0** 技术验证与验收样例冻结。 [集成约定](docs/requirements/07-architecture.md#integration-requirements)
 - [ ] **M1** 后端核心：信源录入、Graphiti 适配层、矛盾策略、快照
 - [ ] **M2** 前端核心：画布、时间轴、矛盾审阅、路径
 - [ ] **M3** 有据问答与验收：英伟达高层变动场景、“雨夜山庄”剧本杀场景
