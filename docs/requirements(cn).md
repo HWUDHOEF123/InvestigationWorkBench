@@ -27,6 +27,10 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
    * Graphiti 只用一个模型。
    * 向量模型须支持多语言，其原生输出维度必须等于 `EMBEDDING_DIM`。
    * 关闭 Graphiti 遥测。
+9. **并行 worktree 共用一个 Neo4j。**
+   * 配置统一由 `app/config.py` 解析，密钥取自主 worktree。
+   * 每个 Graphiti `group_id` 的格式为 `<namespace>__<case_id>`。
+   * 测试只删除自己的 `group_id`；绝不能不带范围地调用 `clear_data()`。
 
 ## 术语表
 
@@ -1068,7 +1072,8 @@ type ImageDraft = {
 
 ```text
 backend/app/        api/ intake/ graph/ policy/ snapshot/ qa/ templates/
-backend/scripts/    check_env.py · seed_case.py · drop_source.py · export_snapshot.py   （场景脚本调用运行中的后端接口）
+backend/app/config.py  配置解析（应用与脚本共用）
+backend/scripts/    bootstrap_worktree.sh · check_env.py · seed_case.py · drop_source.py · export_snapshot.py   （场景脚本调用运行中的后端接口）
 backend/requirements.in · requirements.txt · .env.example
 frontend/src/       canvas/ timeline/ panels/ inspector/ store/ api/（生成的类型） i18n/zh-CN/
 fixtures/           nvidia/ rainy_manor/
@@ -1080,6 +1085,9 @@ docs/               requirements/（英文，标识符以此为准） · require
 ```ini
 APP_MODE=live                          # live | fixture
 API_HOST=127.0.0.1
+API_PORT=8000                          # 子 worktree 的端口由 bootstrap_worktree.sh 写入 .env.local
+FRONTEND_PORT=5173
+# CASE_NAMESPACE=                      # group_id 前缀，默认取 worktree 目录名
 NEO4J_URI=bolt://127.0.0.1:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=change_me               # 首次启动前设置的初始密码
@@ -1121,6 +1129,33 @@ venv/bin/python scripts/check_env.py                       # 检查 Python、gra
 * `check_env.py` 只有在全部检查通过时才以 0 退出。
 * 向量检查还会打印“黄仁勋”与“Jensen Huang”的跨语言相似度。
 * 更新依赖：先改 `requirements.in`，再执行 `uv pip compile requirements.in -o requirements.txt --python-version 3.11`，然后重新 sync。
+
+**并行 worktree**
+
+多个 git worktree 可以同时运行，共用一个 Neo4j 实例和同一份密钥。
+
+**配置：** 应用和所有脚本都通过 `app/config.py` 读取配置，优先级从高到低依次为：
+
+1. 进程环境变量；
+2. `<worktree>/backend/.env.local`：本 worktree 的覆盖项（已被 git 忽略）；
+3. `<worktree>/backend/.env`；
+4. `<主 worktree>/backend/.env`：共享的密钥，通过子 worktree 的 `.git` 文件定位。
+
+**初始化：** 新 worktree 中执行一次 `backend/scripts/bootstrap_worktree.sh`。它可以重复执行，借助 uv 缓存约 10 秒完成，会做三件事：
+
+* 为本 worktree 建立独立的 `backend/venv` 并同步锁定的依赖；
+* 如果是子 worktree，写入 `.env.local`：分配空闲端口（从 8001/5174 起，8000/5173 留给主 worktree），并设 `SEMAPHORE_LIMIT=2`；
+* 运行 `check_env.py`。
+
+**共用 Neo4j 时的隔离：** Neo4j Community 只有一个业务库，所以靠数据层面隔离：
+
+* 每个 Graphiti `group_id` 的格式为 `<namespace>__<case_id>`，由 `Settings.group_id()` 生成。
+  * namespace 默认取 worktree 目录名，可用 `CASE_NAMESPACE` 覆盖。
+* 测试使用唯一的案件 ID，只删除自己的 `group_id`。
+* **绝不能**不带 `group_ids` 调用 Graphiti 的 `clear_data()`，也不能执行不带范围的 `MATCH (n) DETACH DELETE n`。
+* 建索引和约束的操作是幂等的，可以并发执行。
+
+**并发：** N 个 worktree 同时运行时，LLM 的并发调用数是 N × `SEMAPHORE_LIMIT`，需留意服务商的限流。
 
 **索引就绪：** 后端启动时先建好 Graphiti 的索引和约束，再执行 `CALL db.awaitIndexes()` 等待索引就绪，之后才接受请求。
 

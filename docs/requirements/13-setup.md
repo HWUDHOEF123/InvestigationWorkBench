@@ -23,7 +23,8 @@
 
 ```text
 backend/app/        api/ intake/ graph/ policy/ snapshot/ qa/ templates/
-backend/scripts/    check_env.py · seed_case.py · drop_source.py · export_snapshot.py   (scenario scripts call the running API)
+backend/app/config.py  settings resolution (shared by app and scripts)
+backend/scripts/    bootstrap_worktree.sh · check_env.py · seed_case.py · drop_source.py · export_snapshot.py   (scenario scripts call the running API)
 backend/requirements.in · requirements.txt · .env.example
 frontend/src/       canvas/ timeline/ panels/ inspector/ store/ api/ (generated types) i18n/zh-CN/
 fixtures/           nvidia/ rainy_manor/
@@ -37,6 +38,9 @@ Copy it from `backend/.env.example`. The file is git-ignored.
 ```ini
 APP_MODE=live                          # live | fixture
 API_HOST=127.0.0.1
+API_PORT=8000                          # linked worktrees: set in .env.local by bootstrap_worktree.sh
+FRONTEND_PORT=5173
+# CASE_NAMESPACE=                      # group_id prefix; defaults to the worktree directory name
 NEO4J_URI=bolt://127.0.0.1:7687
 NEO4J_USER=neo4j
 NEO4J_PASSWORD=change_me               # the initial password set before first start
@@ -80,6 +84,33 @@ venv/bin/python scripts/check_env.py                       # checks Python, grap
 * `check_env.py` exits with `0` only when every check passes.
 * The embedding check also prints the cross-lingual similarity of `黄仁勋` vs `Jensen Huang`.
 * To update dependencies: edit `requirements.in`, run `uv pip compile requirements.in -o requirements.txt --python-version 3.11`, then sync again.
+
+## Parallel worktrees
+
+Several git worktrees can run side by side and share one Neo4j instance and one set of secrets.
+
+**Configuration.** `app/config.py` is used by the app and every script. It resolves settings in this order, highest priority first:
+
+1. process environment variables;
+2. `<worktree>/backend/.env.local`, holding per-worktree overrides (git-ignored);
+3. `<worktree>/backend/.env`;
+4. `<main worktree>/backend/.env`, holding the shared secrets. It is located through the linked worktree's `.git` file.
+
+**Setup.** In a new worktree, run `backend/scripts/bootstrap_worktree.sh` once. It is idempotent and takes about 10 s with the uv cache. It does three things:
+
+* creates the worktree's own `backend/venv` and syncs the lock;
+* in a linked worktree, writes `.env.local` with free ports and `SEMAPHORE_LIMIT=2`. Ports start at 8001/5174; 8000/5173 belong to the main worktree.
+* runs `check_env.py`.
+
+**Isolation in the shared Neo4j.** Neo4j Community has a single user database, so isolation works at the data level:
+
+* Every Graphiti `group_id` is `<namespace>__<case_id>`, built by `Settings.group_id()`.
+  * The namespace defaults to the worktree directory name and can be overridden with `CASE_NAMESPACE`.
+* Tests use unique case IDs and delete only their own `group_id`s.
+* **Never** call Graphiti's `clear_data()` without `group_ids`, and never run an unscoped `MATCH (n) DETACH DELETE n`.
+* Index and constraint creation is idempotent, so it is safe to run concurrently.
+
+**Concurrency.** N worktrees running at once make N × `SEMAPHORE_LIMIT` concurrent LLM calls. Watch the provider's rate limits.
 
 **Index readiness.** On startup, the backend builds Graphiti's indices and constraints, then waits on `CALL db.awaitIndexes()`, and only then accepts traffic.
 

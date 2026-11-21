@@ -1,8 +1,9 @@
 """Environment self-check for the IntelGraph backend.
 
-Run from backend/:  python scripts/check_env.py
-Reads backend/.env and verifies each dependency independently, so one missing
-key does not hide the status of the others. Exit code 0 only if all pass.
+Run from backend/:  venv/bin/python scripts/check_env.py
+Loads settings through app.config (so it works in any git worktree) and verifies each
+dependency independently, so one missing key does not hide the others.
+Exit code 0 only if all pass.
 """
 
 from __future__ import annotations
@@ -12,19 +13,28 @@ import os
 import sys
 from pathlib import Path
 
-ENV_PATH = Path(__file__).resolve().parent.parent / ".env"
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from app.config import env_files, get_settings
 
 
-def load_env(path: Path) -> None:
-    if not path.exists():
-        print(f"[FAIL] {path} not found. Copy .env.example to .env first.")
+def load_env() -> None:
+    files = env_files()
+    if not files:
+        print(
+            "[FAIL] no backend/.env found here or in the main worktree. Copy .env.example to .env."
+        )
         sys.exit(1)
-    for raw in path.read_text(encoding="utf-8").splitlines():
-        line = raw.split("#", 1)[0].strip()
-        if not line or "=" not in line:
-            continue
-        key, value = line.split("=", 1)
-        os.environ.setdefault(key.strip(), value.strip())
+    settings = get_settings()
+    for key, value in settings.model_dump().items():
+        text = str(value).lower() if isinstance(value, bool) else str(value)
+        os.environ.setdefault(key.upper(), text)
+    record(
+        "config",
+        True,
+        f"namespace={settings.namespace} api_port={settings.api_port} "
+        f"frontend_port={settings.frontend_port} files={[str(f) for f in files]}",
+    )
 
 
 results: list[tuple[str, bool, str]] = []
@@ -176,7 +186,7 @@ async def check_embedding() -> None:
 
 
 async def main() -> int:
-    load_env(ENV_PATH)
+    load_env()
     check_python()
     check_graphiti_import()
     await check_neo4j()
