@@ -14,7 +14,7 @@ The policy restores source reliability and routes genuine disagreements to the a
 ## When rules run
 
 * **P1–P4** run automatically, in order, after every chunk's `add_episode` and before the revision is published.
-* **P4** also re-runs after a tier change or a merge.
+* **P3 re-check and P4** also run whenever either side's best tier changes: a tier edit, a new support added during ingestion, or a change to a speculative flag. **P4** also re-runs after a merge.
 * **P5–P6** are analyst actions.
 * Every rule outcome writes a decision record.
 
@@ -59,6 +59,17 @@ If classification fails after one retry, the pair is treated like an unattribute
 
 **Write-back** sets `invalid_at` / `expired_at` on the Graphiti edge through the adapter, between chunks, while ingestion is serialized. It always records the before and after values.
 
+### P3 re-check
+
+This applies to every closure that P3 **kept automatically** under the first `CHANGE` row. It is re-checked whenever either side's best tier changes.
+
+* **Condition broken.** If "winner's tier is equal to or better than the loser's" no longer holds, apply the `CHANGE` / less-reliable row: write back the loser's pre-closure values and open a `contested_change` conflict.
+  * Example: the winner's source is downgraded.
+  * Example: the loser gains a better support, such as a new T1 source that Graphiti merged as a duplicate.
+  * The re-check writes a decision record. Undoing the tier edit that triggered it also undoes the re-check.
+* **One direction only.** A tier change can only *open* review. It never closes a fact or resolves a conflict automatically. If a `contested_change` conflict's winner later becomes equal or better, only the P4 suggestion is updated.
+* **Not re-checked:** closures the analyst accepted through P6 (`change_accepted`), and any adjudicated conflict.
+
 ## P4 · Suggest a winner
 
 * Compare the best tiers of the two sides.
@@ -93,5 +104,5 @@ A note is mandatory. Each action writes a decision record.
 
 **Interactions:**
 
-* A tier change recomputes corroboration and suggestions. It never reverses an adjudication or an accepted change.
+* A tier change recomputes corroboration and suggestions, and triggers the P3 re-check. It never reverses an analyst decision: neither a P6 adjudication nor an analyst-accepted change (`change_accepted`).
 * Refutation takes precedence over open conflicts ([05](05-time-and-fact-states.md)).

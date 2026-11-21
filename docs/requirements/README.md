@@ -1,6 +1,6 @@
 # IntelGraph Requirements — Index
 
-> **Version 1.5.0-PRD** · Draft for implementation · Chinese reading copy: [`../requirements(cn).md`](<../requirements(cn).md>) (keep in sync; these English files are canonical for identifiers)
+> **Version 1.5.1-PRD** · Draft for implementation · Chinese reading copy: [`../requirements(cn).md`](<../requirements(cn).md>) (keep in sync; these English files are canonical for identifiers)
 
 IntelGraph is a Chinese-language investigation workbench. It turns fragmented, time-sensitive, contradictory material into a source-grounded case graph on **Graphiti** (`graphiti-core==0.31.2`) and **Neo4j**.
 
@@ -103,3 +103,4 @@ The v1 core loop is: **ingest sources → view the graph at any event time → r
 | 1.3.0 | Knowledge time removed from v1; decision records; English PRD split into this folder. |
 | 1.4.0 | Applied the independent review (Codex, verified against `graphiti-core` 0.31.2): causal capture via Graphiti's `invalidated_by`; invalidation write-back; `IG_FactSupport` evidence; chunk checkpoints and resume; `graph.changed` + snapshot refetch; image drafts; full P6 transitions; complete style/eligibility rules; Q&A request and stream contract; fixed Scenarios A and B; telemetry off, loopback ports, no APOC; reported-speech tier cap moved to backlog; CN parity and links fixed. |
 | 1.5.0 | **Selectable thinking level** (`off`/`low`/`medium`/`high`, default `off`): set per case for extraction and classification, and per question for Q&A (with an optional, unverified reasoning stream). Mapped by a provider profile and injected by the adapter. Provider facts verified during environment setup: DeepSeek supports `json_object` only; thinking is on by default and is disabled via `thinking: {type: disabled}`; Bailian's OpenAI-compatible path is `/compatible-mode/v1`; the embedder's native dimension must equal `EMBEDDING_DIM`; `httpx[socks]` is needed under SOCKS proxies. Setup moved to Homebrew Neo4j and a cloud embedder. |
+| 1.5.1 | **P3 re-check:** an automatically kept `CHANGE` closure is re-checked whenever either side's best tier changes. If the closure no longer complies, it is written back and opened as `contested_change`. This works in one direction only: a tier change never auto-closes anything. **Fact start** (`display_valid_at_ts`, never null) is defined once in 05 and used by the timeline, paths and Q&A. Parallel-worktree setup. |
