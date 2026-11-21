@@ -69,7 +69,7 @@ All sources are on story day 1, in UTC+8.
 
 | Layer | What | Needs |
 | :--- | :--- | :--- |
-| Policy unit tests | P1–P6 on hand-authored graph states: write-back followed by a later genuine transition (the A5 risk); two same-date incoming facts; backfill self-closure; `COMPATIBLE`; every P6 outcome and undo; precedence across multiple conflicts | Nothing external |
+| Policy unit tests | P1–P6 on hand-authored graph states: write-back followed by a later genuine transition (the A5 risk); two same-date incoming facts; backfill self-closure; `COMPATIBLE`; every P6 outcome and undo; precedence across multiple conflicts; **P3 re-check**: downgrading the winner, or a new T1 support for the loser, reopens a kept closure as `contested_change`, while an upgrade never closes anything automatically; a fact with null `valid_at` is placed by its inferred start on the timeline and in paths | Nothing external |
 | Adapter contract tests | Against pinned `graphiti-core` and Neo4j, with a scripted fake LLM: the `invalidated_by` hook fires; write-back is visible to Graphiti's next resolution; two `group_id`s stay isolated; resume after Graphiti has committed but before the policy runs | Neo4j |
 | Frontend E2E (fixture mode) | Read paths: rendering and styles, timeline at the A/B timestamps, paths A4/B3, conflict display, recorded Q&A stream with citation flags | Nothing external |
 | Live checklist | A1–A7 and B1–B3 end to end, before each release | Provider + Neo4j |

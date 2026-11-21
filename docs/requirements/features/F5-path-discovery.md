@@ -5,7 +5,7 @@
 * **Trigger.** Select exactly 2 nodes → *最短路径* (or `P`).
 * **Graph.** A per-revision, undirected adjacency list built in the frontend. Neighbours are sorted by `(entity_id, fact_id)`, so results are deterministic.
 * **Fact eligibility at T:**
-  * `valid_at ≤ T` (future facts are excluded);
+  * start `≤ T`, where start is `display_valid_at_ts` ([05](../05-time-and-fact-states.md)), so future facts are excluded;
   * `expired` facts are allowed by default and labelled *历史*; a toggle turns this off;
   * `refuted` facts are excluded;
   * speculative facts are excluded by default; a toggle includes them;
@@ -13,7 +13,7 @@
 
   The other canvas filters do not affect paths.
 * **Search.** BFS, at most 6 hops. It returns the first shortest path in the deterministic order.
-  * When several facts connect the same pair of nodes, the best tier is used, then the earliest `valid_at`.
+  * When several facts connect the same pair of nodes, the best tier is used, then the earliest start.
   * The hop detail says "另有 n 条".
 * **Display.**
   * The path is highlighted, and everything else dims to 15%.

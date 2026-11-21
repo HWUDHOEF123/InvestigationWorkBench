@@ -26,12 +26,12 @@
 
 Context is assembled deterministically from the cached snapshot of that version.
 
-* **Scope.** The selected entities, the facts among them, and their 1-hop facts, all eligible at `as_of_ts`.
+* **Scope.** The selected entities, the facts among them, and their 1-hop facts, all eligible at `as_of_ts` under the same rules as the timeline (start `≤ T`; [05](../05-time-and-fact-states.md)).
   * Historical facts are labelled 历史.
   * Refuted facts are labelled 已驳斥.
   * Speculative facts are included only if `include_speculative` is true, and are then labelled 推测.
   * Synthetic facts are labelled 推演.
-* **Ranking.** Facts among the selection, then disputed facts, then better tier, then later `valid_at`, then `fact_id`.
+* **Ranking.** Facts among the selection, then disputed facts, then better tier, then later start, then `fact_id`.
 * **Limits.**
   * At most 60 facts and about 12k tokens of context.
   * Each excerpt is ≤ 300 characters, fetched in one batched query.

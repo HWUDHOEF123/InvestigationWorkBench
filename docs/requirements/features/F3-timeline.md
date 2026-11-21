@@ -8,7 +8,7 @@
   * An editable "as of" time.
   * The template's default granularity sets the initial zoom and the slider step.
   * The tick labels adapt to the visible span: minutes, then hours, days, months and years. Story mode uses "第n天 HH:mm".
-* **Histogram.** Shows the density of fact `valid_at` values, with markers for T1 sources (◆) and open conflicts (⚠).
+* **Histogram.** Shows the density of fact starts, with markers for T1 sources (◆) and open conflicts (⚠).
 * **Semantics.** Temporal states and node visibility at T follow [05](../05-time-and-fact-states.md), with half-open intervals. Status and flags always reflect the current revision.
 * **No server calls while scrubbing.**
   * Hidden elements follow the rules in [F2](F2-graph-canvas.md): not interactive, and their coordinates are kept.

@@ -40,18 +40,20 @@ What follows from this:
 
 ## Temporal state at T
 
+**Start.** A fact's *start* is `display_valid_at_ts`: its `valid_at`, or, if that is null, the earliest `reference_time` among its supports (flagged `valid_at_inferred`). The start is never null. The timeline ([F3](features/F3-timeline.md)), paths ([F5](features/F5-path-discovery.md)) and Q&A ([F6](features/F6-grounded-qa.md)) all use it.
+
 Derived on demand and never stored.
 
 | State | Condition |
 | :--- | :--- |
-| `future` | `valid_at > T` |
+| `future` | start `> T` |
 | `expired` | `invalid_at ≠ null ∧ invalid_at ≤ T` |
 | `active` | otherwise |
 
 **Node visibility.** A node is shown when `first_seen ≤ T`.
 
-* `first_seen` is the earliest `valid_at` among its facts.
-* If none of its facts has a `valid_at`, use the earliest `reference_time` among the sources supporting those facts.
+* `first_seen` is the earliest start among its facts.
+* An entity with no facts uses the earliest `reference_time` among the sources that mention it.
 
 ## Epistemic status and flags
 
