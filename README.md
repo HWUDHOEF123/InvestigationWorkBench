@@ -12,6 +12,31 @@ IntelGraph 把碎片化、强时效、相互矛盾的材料整理成一张处处
 
 ---
 
+## 界面预览
+
+IntelGraph 的界面设计支持在同一个案件里切换三种页面风格。点击下方名称查看各自的设计稿。 [v1 界面规范](docs/requirements/09-ui-ux.md)
+
+<details>
+<summary>时态图谱</summary>
+
+![时态图谱风格。左侧是信源和筛选器，中间是关系图谱，底部是时间轴，右侧是问答和来源引用。](docs/assets/intelgraph-workbench.jpeg)
+
+</details>
+
+<details>
+<summary>文档与证据画布</summary>
+
+![文档与证据画布风格。浅色画布上排列着实体卡片和证据摘录，左侧是案件文档。](docs/assets/intelgraph-document-canvas.jpeg)
+
+</details>
+
+<details>
+<summary>案件板</summary>
+
+![案件板风格。深色画布上用连线串起人物卡片、原文剪报和线索便签，底部是时间轴，右侧是问答。](docs/assets/intelgraph-investigation-board.jpeg)
+
+</details>
+
 ## 为什么做
 
 无论是尽调报告、命案卷宗还是剧本杀，分析者面对的是同样的难题：

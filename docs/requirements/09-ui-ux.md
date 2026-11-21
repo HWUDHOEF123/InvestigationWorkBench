@@ -1,6 +1,16 @@
-# 09 · UI/UX (Intel Dark, zh-CN)
+# 09 · UI/UX (zh-CN)
 
 > Index: [README](README.md) · Depends on: [05](05-time-and-fact-states.md) · Used by: [F2](features/F2-graph-canvas.md)–[F6](features/F6-grounded-qa.md)
+
+## Workbench styles
+
+Users can switch among three page styles while working on the same case. Each style uses the same case data and evidence links. [Design previews](../../README.md#界面预览)
+
+| Style | Visual focus |
+| :--- | :--- |
+| 时态图谱 | The Intel Dark palette, with a relationship graph, time scrubber, conflict markers and cited answers |
+| 文档与证据画布 | A light canvas centred on source documents, entity cards and evidence excerpts |
+| 案件板 | A dark board with pinned people, clippings and notes connected as investigation leads |
 
 ## Layout
 
@@ -39,7 +49,7 @@ Shape always duplicates color.
 | Event | Diamond | `#F59E0B` gold |
 | Concept | Hexagon | `#CBD5E1` light slate ("未分类" badge when unclassified) |
 
-The canvas background is `#0B0F19`, with a dot grid in `#1E293B`.
+In the Intel Dark graph style, the canvas background is `#0B0F19`, with a dot grid in `#1E293B`.
 
 ## Facts: line style
 

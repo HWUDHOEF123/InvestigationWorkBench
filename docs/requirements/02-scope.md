@@ -40,6 +40,6 @@
 ## Non-goals
 
 * Multi-user collaboration and authentication. v1 binds to `127.0.0.1`.
-* Additional visual themes.
+* Visual themes beyond the three workbench styles defined in [09](09-ui-ux.md).
 * Automated web collection.
 * Cases above ~2,000 facts.
