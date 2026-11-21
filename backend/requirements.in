@@ -1,0 +1,26 @@
+# Top-level backend dependencies. Lock with:
+#   uv pip compile requirements.in -o requirements.txt --python-version 3.11
+# Graphiti is pinned exactly: the adapter's invalidated_by hook and write-back
+# depend on its internals (docs/requirements/07-architecture.md).
+graphiti-core==0.31.2
+# Keep Graphiti's transitive stack on the major lines it was tested with
+# (versions taken from graphiti v0.31.2 uv.lock). graphiti imports httpx directly
+# but does not declare it; openai 3.x switched to httpx2, which breaks the import.
+openai>=2.32,<3
+# [socks]: httpx honours ALL_PROXY=socks5://… from the environment and needs socksio for it.
+httpx[socks]>=0.28,<0.29
+neo4j>=6.1,<7
+
+# API
+fastapi
+uvicorn[standard]
+python-multipart
+pydantic-settings
+
+# Intake
+pymupdf
+
+# Dev / test
+pytest
+pytest-asyncio
+ruff
