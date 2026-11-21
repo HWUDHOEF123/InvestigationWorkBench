@@ -25,9 +25,9 @@ Every Source has:
 4. **Transcribe.** One vision request covers the whole draft. Each image gets:
    * `original_text`: verbatim, in the original language;
    * `description_zh`: a visual description in Chinese;
-   * `detected_dates`.
+   * `detected_dates`: calendar dates found in the image, optionally with a time. Bare clock times such as "21:00" are not dates.
 
-   Only the images that failed are retried.
+   Only the images that failed are retried. The provider rejects the whole request when any image is invalid, so each image is validated before sending. If the request still fails on one image, that image is marked failed and the rest are re-sent without it ([07](07-architecture.md)).
 5. **Review.** The analyst edits `reviewed_text`. Edits are stored separately from the model output, and nothing is re-recognized after an edit.
 6. **Confirm.** Confirming creates the Source; its `reviewed_text` is what gets ingested. Skipping the review is allowed but writes a decision record.
 

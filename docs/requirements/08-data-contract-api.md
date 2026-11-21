@@ -19,7 +19,8 @@ type Snapshot = {
   case: { id: string; name: string; template: string; template_version: string; timezone: string;
           time_mode: 'absolute' | 'story'; story_anchor_ts?: number;
           settings: { thinking: { extraction: ThinkingLevel; classification: ThinkingLevel;
-                                  qa_default: ThinkingLevel } } };   // all default 'off'
+                                  qa_default: ThinkingLevel };        // all default 'off'
+                      known_aliases: string[][] } };  // canonical name first; seeded at creation
   version: number;                                   // revision
   entities: Entity[]; facts: Fact[]; conflicts: Conflict[]; sources: Source[];
   layout: { version: number; positions: Record<string, { x: number; y: number }> };
@@ -42,9 +43,10 @@ type Fact = {
   invalid_at_ts: number | null;
   best_tier: 1 | 2 | 3 | null;                        // null = only speculative support
   supports: { source_id: string; episode_id: string; tier: 1 | 2 | 3;
-              speculative: boolean; synthetic: boolean }[];
+              speculative: boolean; synthetic: boolean;
+              stated_end_ts: number | null }[];                // P1 stated end, if any
   status: 'reported' | 'corroborated' | 'disputed' | 'refuted';
-  speculative: boolean; synthetic: boolean; closure_unconfirmed: boolean;
+  speculative: boolean; synthetic: boolean; closure_unconfirmed: boolean; end_claimed: boolean;
   conflict_ids: string[];
 };
 
@@ -96,7 +98,7 @@ All case-scoped resources are checked against the case in the path. A mutation r
 | :--- | :--- |
 | `GET /templates` | Templates and their versions |
 | `GET /providers/llm` | `{model, thinking_levels: ThinkingLevel[]}`. An empty list means the provider has no thinking support, and the UI hides the selectors |
-| `POST /cases` · `GET /cases/{id}` | Create or read a case |
+| `POST /cases` · `GET /cases/{id}` | Create or read a case. The create body accepts an optional `known_aliases` (canonical name first in each group). Extraction uses these plus the groups derived from active merges ([03](03-domain-model.md)) |
 | `PUT /cases/{id}/settings` | `{thinking: {extraction, classification, qa_default}}`. Applies to jobs started afterwards and writes a decision record |
 | `GET /cases/{id}/brief` · `PUT /cases/{id}/brief` | Case brief (versioned) |
 | `GET /cases/{id}/snapshot` | Latest effective graph. Supports `ETag` / `If-None-Match` |
@@ -111,7 +113,7 @@ All case-scoped resources are checked against the case in the path. A mutation r
 | `POST /cases/{id}/evidence` | `{fact_ids}` → `Evidence[]` (batched) |
 | `POST /cases/{id}/conflicts` | P5 manual conflict `{fact_ids}` |
 | `POST /conflicts/{id}/adjudicate` | P6 `{outcome \| "hold", note}` |
-| `POST /facts/{id}/closure` | Resolve an unconfirmed closure: `{action: "confirm" \| "revert", note?}` |
+| `POST /facts/{id}/closure` | Resolve an unconfirmed closure `{action: "confirm" \| "revert", note?}`, or a claimed end `{action: "apply_end" \| "dismiss_end", support_id, note}` |
 | `POST /cases/{id}/merges` | `{alias_id, canonical_id, canonical_name?, version}` |
 | `POST /decisions/{id}/undo` | Undo any undoable decision: adjudication, closure action, tier change, merge, re-layout, settings change |
 | `GET /cases/{id}/decisions` | Audit log, filterable by object and type |

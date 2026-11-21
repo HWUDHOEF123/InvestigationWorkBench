@@ -8,13 +8,13 @@
 | :--- | :--- | :--- |
 | **Case** | One investigation: a template and version, a time zone, a versioned case brief, an optional story anchor, and settings. The settings hold thinking levels for extraction, classification and the Q&A default; each defaults to `off`. Maps to a Graphiti `group_id`. | IntelGraph |
 | **Source** | One unit of evidence (document, confirmed image set or note) with tier, `reference_time`, optional speaker and flags. See [04](04-sources-and-tiers.md). | IntelGraph |
-| **Chunk** | A deterministic slice of a Source's normalized text, with character offsets and an ingestion checkpoint. | IntelGraph |
+| **Chunk** | A deterministic slice of a Source's normalized text, with character offsets and a two-phase checkpoint: *staged* (the P1 capture is persisted before Graphiti writes) and *complete* (the policy finished, so the revision can be published). See [F1](features/F1-source-intake.md). | IntelGraph |
 | **Episode** | The Graphiti `EpisodicNode` for one chunk. It is named `{source_id}:{chunk_index}`, and its `valid_at` is the Source's `reference_time`. | Graphiti |
 | **Entity** | A Graphiti `EntityNode`, typed per the ontology below. | Graphiti (+ merge projection) |
 | **Fact** | A Graphiti `EntityEdge`: relation name, Chinese `fact` text, `valid_at` / `invalid_at`, `episodes`, `attributes`. | Graphiti |
-| **Support** | `IG_FactSupport`: one `(fact, source, episode)` link. It is created whenever an episode creates a fact or re-confirms it as a duplicate. It carries the source's tier, speculative/synthetic flags, and an automatically located excerpt. | IntelGraph |
+| **Support** | `IG_FactSupport`: one `(fact, source, episode)` link. It is created whenever an episode creates a fact or re-confirms it as a duplicate. It carries the source's tier, speculative/synthetic flags, an automatically located excerpt, and a `stated_end` when the source states an end for the claim ([06](06-contradiction-policy.md) P1). | IntelGraph |
 | **Conflict** | A recorded contradiction between facts, with its kind, suggestion, state and adjudication history. See [06](06-contradiction-policy.md). | IntelGraph |
-| **Decision record** | An append-only audit entry for each policy decision and analyst action (closure kept / written back, adjudication, merge, tier change, skipped review, undo). It stores before/after values and is the basis for undo. | IntelGraph |
+| **Decision record** | An append-only audit entry for each policy decision and analyst action (closure kept / written back, stated end applied / claimed / confirmed / dismissed, adjudication, merge, tier change, skipped review, undo). It stores before/after values and is the basis for undo. | IntelGraph |
 | **Revision** | A monotonically increasing version of the case's effective graph, published after each chunk's policy completes and after each analyst mutation. | IntelGraph |
 
 ## Ownership and write-back
@@ -27,7 +27,7 @@
   * `IG_Merge`
   * `IG_Layout`
   * `IG_Decision`
-* **Only one write to Graphiti data is allowed.** When P3 or P6 overrides a closure, the Graphiti adapter writes `invalid_at` / `expired_at` back onto that edge. It stores the original values in a decision record and restores them on undo.
+* **Only one write to Graphiti data is allowed.** When P3 or P6 overrides a closure, or applies a stated end, the Graphiti adapter writes `invalid_at` / `expired_at` back onto that edge. It stores the original values in a decision record and restores them on undo.
 * Write-back keeps Graphiti's own later contradiction checks consistent with what the analyst sees. Graphiti reads these fields from the database and does not see the overlay.
 * All other Graphiti properties are read-only to IntelGraph.
 * The **Snapshot Builder** combines Graphiti data with merges, supports, conflicts and flags into the *effective graph* for one revision. It caches that graph for the snapshot and Q&A.
@@ -78,11 +78,13 @@ A template defines:
 
 * subtype labels (e.g. `Person.subtype = 角色`);
 * extra relation types and the `edge_type_map`;
-* extraction instructions:
+* the **claim key** per relation: the typed attributes that identify the same claim, e.g. `role` for `AFFILIATED_WITH` and `kind` for `SOCIAL_TIE`. Used by P3 stated ends ([06](06-contradiction-policy.md));
+* extraction instructions, passed on every episode as Graphiti's `custom_extraction_instructions`:
   * zh-CN fact text and summaries;
-  * naming policy;
+  * naming policy (one entity per real-world referent; native or most authoritative canonical name; other-language names as aliases), followed by the case's known-alias list;
   * atomic facts (one claim per fact);
   * plans and denials expressed through `modality`;
+  * the case's UTC offset, so that extracted times are case-local ([05](05-time-and-fact-states.md));
 * tier labels and the default tier per source type ([04](04-sources-and-tiers.md));
 * time mode (`absolute` | `story`) and default granularity ([05](05-time-and-fact-states.md)).
 

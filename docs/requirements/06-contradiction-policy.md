@@ -15,6 +15,7 @@ The policy restores source reliability and routes genuine disagreements to the a
 
 * **P1–P4** run automatically, in order, after every chunk's `add_episode` and before the revision is published.
 * **P3 re-check and P4** also run whenever either side's best tier changes: a tier edit, a new support added during ingestion, or a change to a speculative flag. **P4** also re-runs after a merge.
+* **P3 stated ends** run after the closure rows of P3, in the same chunk.
 * **P5–P6** are analyst actions.
 * Every rule outcome writes a decision record.
 
@@ -24,12 +25,21 @@ The Graphiti adapter wraps `graphiti_core.graphiti.resolve_extracted_edges` for 
 
 This yields exact pairs: *closed fact → the new fact(s) that closed it*. Self-closure is handled separately.
 
-**Self-closure (backfill).** Here Graphiti closes the incoming fact because an existing candidate starts later.
+**Self-closure (backfill).** Here Graphiti closes the incoming fact because an existing candidate starts later. The adapter observes Graphiti's temporal step (`_apply_temporal_invalidation`) inside the same resolver call, because only there are the LLM-selected candidates visible.
 
-* If exactly one stored candidate has `valid_at` equal to the incoming fact's new `invalid_at`, that candidate is the cause.
+* If exactly one distinct stored candidate in that list has `valid_at` equal to the incoming fact's new `invalid_at`, that candidate is the cause.
 * Otherwise the closure is **unattributed**.
+* An end that the incoming fact already carried before the temporal step came from the source text. It is a stated end (below), not a self-closure.
 
-The adapter also records each closed fact's pre-chunk `invalid_at` / `expired_at`, which write-back and undo need.
+**Stated ends.** Within the same resolver call, the adapter also records every incoming fact whose source states an end: extraction gave it an `invalid_at` before Graphiti's temporal step, and its `modality` is `stated`. Graphiti does not apply such ends to existing facts. A duplicate keeps the stored edge and drops the incoming end, and a parallel fact with the same start closes nothing ([05](05-time-and-fact-states.md)). For each stated end the adapter records:
+
+* the end;
+* the claim: canonical endpoints, relation and claim-key attributes;
+* the dedupe outcome: merged into an existing fact, or stored as its own fact.
+
+The end is kept on the resulting support as `stated_end` ([03](03-domain-model.md)). P3 applies it.
+
+**Durability.** The adapter records each closed fact's pre-chunk `invalid_at` / `expired_at`, which write-back and undo need. For a self-closed fact it records the values from before the temporal step. The adapter persists these values, the causal map and the stated ends as the chunk's **staged** checkpoint *before* Graphiti writes, so that a crash after Graphiti's commit loses nothing ([F1](features/F1-source-intake.md)).
 
 The hook is pinned to the Graphiti version, and a contract test runs on every upgrade ([11](11-verification.md)).
 
@@ -59,16 +69,36 @@ If classification fails after one retry, the pair is treated like an unattribute
 
 **Write-back** sets `invalid_at` / `expired_at` on the Graphiti edge through the adapter, between chunks, while ingestion is serialized. It always records the before and after values.
 
+### P3 · Stated ends
+
+This step applies the stated ends captured by P1 to facts that are still open. Speculative supports and stated ends with any `modality` other than `stated` are ignored.
+
+**Target.** The target is the single open fact (null `invalid_at`) that meets all of these conditions:
+
+* it has the same canonical endpoints (after merges) and the same relation as the stated end;
+* its claim-key attributes are equal to the stated end's;
+* its start is before the stated end.
+
+The template defines the claim key for each relation, for example `role` for `AFFILIATED_WITH` and `kind` for `SOCIAL_TIE`. A relation without a key matches on endpoints and relation alone.
+
+| Case | Result |
+| :--- | :--- |
+| Exactly one target, and the stated end's support tier is equal to or better than the target's best tier | **Write back** the stated end onto the target: `invalid_at` = the stated end, `expired_at` = now. The result is kept automatically, so it is subject to the P3 re-check. |
+| Exactly one target, and the support is less reliable | No write. Set `end_claimed` on the target. The analyst can *确认结束* (write the end) or *驳回* from the review list ([F4](features/F4-contradiction-review.md)). |
+| More than one candidate, e.g. one bundled statement covering several roles | No write. Set `end_claimed` on every candidate. The analyst resolves them as above. |
+| No candidate | Nothing to apply. A stated end stored as its own fact simply stays as that fact. |
+
 ### P3 re-check
 
-This applies to every closure that P3 **kept automatically** under the first `CHANGE` row. It is re-checked whenever either side's best tier changes.
+This applies to every closure that P3 **kept automatically** under the first `CHANGE` row, and to every stated end that P3 applied automatically. It is re-checked whenever either side's best tier changes.
 
 * **Condition broken.** If "winner's tier is equal to or better than the loser's" no longer holds, apply the `CHANGE` / less-reliable row: write back the loser's pre-closure values and open a `contested_change` conflict.
+  * For a stated end, the condition is that the support's tier is equal to or better than the target's best tier. If it breaks, write back the target's pre-closure values and set `end_claimed`.
   * Example: the winner's source is downgraded.
   * Example: the loser gains a better support, such as a new T1 source that Graphiti merged as a duplicate.
   * The re-check writes a decision record. Undoing the tier edit that triggered it also undoes the re-check.
-* **One direction only.** A tier change can only *open* review. It never closes a fact or resolves a conflict automatically. If a `contested_change` conflict's winner later becomes equal or better, only the P4 suggestion is updated.
-* **Not re-checked:** closures the analyst accepted through P6 (`change_accepted`), and any adjudicated conflict.
+* **One direction only.** A tier change can only *open* review. It never closes a fact or resolves a conflict automatically. If a `contested_change` conflict's winner later becomes equal or better, only the P4 suggestion is updated. An `end_claimed` support that becomes equal or better stays in review.
+* **Not re-checked:** closures the analyst accepted through P6 (`change_accepted`), stated ends the analyst confirmed or dismissed, and any adjudicated conflict.
 
 ## P4 · Suggest a winner
 

@@ -23,17 +23,19 @@
   * Chunks are about 1,500 tokens on paragraph boundaries. A paragraph that is too long is split at sentence boundaries.
   * Each chunk stores its character offsets in the normalized text.
 * **Ingestion job.** The template version, the brief version and the extraction and classification thinking levels are pinned when the job starts. They are recorded for each chunk. The job runs one chunk at a time:
-  1. `add_episode(name="{source_id}:{chunk_index}", …)`
-  2. P1–P4
+  1. `add_episode(name="{source_id}:{chunk_index}", …)`. Inside it, the adapter persists the **staged** checkpoint *before* Graphiti writes: the episode UUID, the pinned versions and levels, the P1 capture (causal map, pre-chunk values, stated ends) and the support UUIDs ([06](../06-contradiction-policy.md) P1). Graphiti's episode write is one transaction, so a failure inside it rolls back completely.
+  2. P1–P4, using the staged capture
   3. supports and excerpt location
-  4. checkpoint
+  4. the **complete** checkpoint, committed together with the policy's write-backs, decisions and supports where possible
   5. publish a revision
 
   Each chunk therefore makes the graph grow visibly.
 * **Progress.** The source status is `queued → parsing → extracting → applying_policy → committed`, with `partial` and `failed` as the other outcomes. `current_chunk`, `chunk_count` and `error` are stored durably and pushed as `source.progress`.
 * **Resume** (`POST /sources/{id}/resume`):
-  * Restarts from the first chunk that has no checkpoint.
-  * If an episode named `{source_id}:{chunk_index}` already exists (Graphiti committed it, but the policy did not finish), `add_episode` is skipped and P1–P4 run again. The policy is idempotent per chunk.
+  * Restarts from the first chunk that has no **complete** checkpoint. It looks up the episode by `(group_id, name)`:
+    * **No episode.** Graphiti never committed. Re-run `add_episode`; the new attempt replaces the orphaned staged checkpoint.
+    * **One episode whose UUID matches the staged checkpoint.** Graphiti committed, but the policy did not finish. `add_episode` is skipped and P2–P4 run again from the staged capture. The policy is idempotent per chunk: decisions and supports are keyed by stable chunk-and-effect IDs.
+    * **Several episodes, a missing staged checkpoint, or a UUID mismatch.** The source becomes `failed` with error `capture_mismatch` before any revision is published. Later chunks of the case wait behind it.
   * Jobs interrupted by a server restart become `partial` or `failed`. They can be resumed.
 * **Retries.** One retry budget per chunk: 2 attempts, with exponential backoff.
 * **Latency.** One chunk takes several LLM calls, typically 10–60 s. The UI never blocks.
@@ -65,11 +67,12 @@ sequenceDiagram
     API-->>FE: 202 {source_id}
     loop each chunk (one at a time)
         API->>G: add_episode(name=source_id:i, reference_time, template, brief, group_id)
-        G->>DB: Graphiti extract / resolve / close (invalidated_by captured)
-        G-->>P: closures with causes + pre-chunk values
+        G->>G: Extract and resolve; capture closures and stated ends
+        G->>DB: Persist staged capture before committing the Graphiti episode
+        G-->>P: Staged capture with episode UUID, causes and pre-chunk values
         P->>P: P2 classify, P3 apply, P4 suggest
         P->>G: write-back where overridden
-        P->>DB: supports, excerpts, conflicts, decisions, checkpoint
+        P->>DB: supports, excerpts, conflicts, decisions, complete checkpoint
         API-->>FE: SSE source.progress, graph.changed {version}
         FE->>API: GET snapshot (latest), keep positions, animate new elements
     end

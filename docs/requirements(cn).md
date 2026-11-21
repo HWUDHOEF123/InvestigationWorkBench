@@ -1,6 +1,6 @@
 # IntelGraph：时态知识图谱调查工作台
 
-> **版本 1.5.1-PRD** · 待实施草案 · 本文为中文阅读版。英文版按主题拆分在 [`requirements/`](requirements/README.md)，带索引，供 agent 按需读取；涉及标识符时以英文版为准，两份文档须同步更新。
+> **版本 1.5.2-PRD** · 待实施草案 · 本文为中文阅读版。英文版按主题拆分在 [`requirements/`](requirements/README.md)，带索引，供 agent 按需读取；涉及标识符时以英文版为准，两份文档须同步更新。
 
 IntelGraph 是一款面向中文分析师的调查工作台，把碎片化、强时效、相互矛盾的材料整理成一张处处有出处的案件图谱。底层基于 **Graphiti**（`graphiti-core==0.31.2`）和 **Neo4j**。
 
@@ -15,10 +15,10 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
 
 ## 关键约束
 
-1. **数据归属。** 实体、边和 Episode 归 Graphiti 所有；IntelGraph 自己的状态存放在 `IG_*` 节点中，以 Graphiti 的 UUID 作为关联键。**唯一的例外：** 策略推翻 Graphiti 的判定时，Graphiti 适配层可以把边上的 `invalid_at` / `expired_at` 写回 Graphiti。写回时原值记入决策记录，撤销时还原。除此之外，不写 Graphiti 的任何数据。
+1. **数据归属。** 实体、边和 Episode 归 Graphiti 所有；IntelGraph 自己的状态存放在 `IG_*` 节点中，以 Graphiti 的 UUID 作为关联键。**唯一的例外：** 策略推翻 Graphiti 的判定，或落实一条陈述终点时，Graphiti 适配层可以把边上的 `invalid_at` / `expired_at` 写回 Graphiti。写回时原值记入决策记录，撤销时还原。除此之外，不写 Graphiti 的任何数据。
 2. **v1 只用事件时间。** 事件时间即 Graphiti 的 `valid_at` / `invalid_at`，区间为左闭右开 `[valid_at, invalid_at)`；`reference_time` 是文档日期。认知时间不在 v1 范围内。
 3. **Graphiti 只按日期先后让事实失效。** P1–P4 依据信源等级修正这一点。**v1 从不自动裁决**，只给出建议。
-4. **串行导入。** 一次只处理一个切块；该切块的策略执行完毕后才发布新的案件版本；客户端收到 `graph.changed` 后重新拉取快照。
+4. **串行导入。** 一次只处理一个切块；每个切块有一个两阶段检查点：P1 捕获在 Graphiti 写入之前**暂存**，策略执行完毕后标记为**完成**。该切块的策略执行完毕后才发布新的案件版本；客户端收到 `graph.changed` 后重新拉取快照。
 5. **时间轴与路径在前端计算**，基于内存中的快照，拖动时不请求服务端。
 6. **每条事实都关联到它的支撑信源**（`IG_FactSupport`）。摘录自动定位并加标注，定位不到时退回整个切块；问答引用一律校验。
 7. **语言。** 界面和生成内容用简体中文；代码、字段、枚举、关系类型用英文；实体名保留母语形式并附别名，如 `Jensen Huang（黄仁勋）`。适配层要覆盖 Graphiti 默认的“沿用原文语言”指令。
@@ -46,6 +46,8 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
 | 支撑（Support） | 一条 `(事实, 信源, Episode)` 关联（`IG_FactSupport`），携带信源等级和各类标记，是证据展示和印证计算的依据 |
 | 最佳等级 | 一条事实所有非推测支撑中最高的等级（T1 最高） |
 | 失效 / 写回 | 失效：Graphiti 给事实设置 `invalid_at`。写回：适配层修改 Graphiti 边上的 `invalid_at`/`expired_at`，以落实策略的决定 |
+| 陈述终点（stated end） | 信源对某个论断明确说出的结束时间（“X 已于 D 卸任”），由 P1 捕获，由 P3 落实或转入审阅 |
+| 主张键（claim key） | 在同一关系内识别同一论断的类型化属性，如 `AFFILIATED_WITH` 的 `role`；由模板定义 |
 | 冲突（Conflict） | 一条被记录的矛盾（`disagreement` 或 `contested_change`），带建议和裁决结果 |
 | 决策记录 | 只追加的审计记录，每次策略决定和分析师操作都写一条，也是撤销的依据 |
 | 版本（Revision） | 案件有效图的单调递增版本号 |
@@ -112,7 +114,7 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
 | 转述限级（T1 叙述中引用的角色原话按 T3 计） | 需要按每条支撑记录发言人。v1 要求把每段陈述作为带发言人的独立信源录入 |
 | 校验过的原文区间（核对字符偏移） | v1 的摘录是自动定位的，并加了标注 |
 | Tier 1 证据自动裁决 | v1 只给建议 |
-| 自研矛盾扫描 | v1 由分析师手动标记（P5） |
+| 自研矛盾扫描 | v1 由分析师手动标记（P5）。例外：信源对仍然有效的事实明确说出的结束时间，在 v1 中由 P3 **陈述终点**落实（见六） |
 | 自动发现重复实体的队列 | v1 依靠 Graphiti 自身的消歧、已知别名表和手动合并 |
 | 可写的 fixture 接口 | v1 的 fixture 模式只读 |
 | AI 假设节点；报告导出；人工编辑事实 | |
@@ -134,13 +136,13 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
 | :--- | :--- | :--- |
 | Case | 模板及其版本、时区、带版本的案件指引、可选的故事锚点，以及案件设置（抽取、分类、问答默认值三项思考强度，默认都是 `off`）；对应 `group_id` | IntelGraph |
 | Source | 等级、`reference_time`、可选发言人、各类标记 | IntelGraph |
-| Chunk | 对规范化文本确定性切分出的片段，带字符偏移和导入检查点 | IntelGraph |
+| Chunk | 对规范化文本确定性切分出的片段，带字符偏移和两阶段检查点：**暂存**（P1 捕获在 Graphiti 写入之前持久化）与**完成**（策略已执行完毕，可以发布版本）；见 F1 | IntelGraph |
 | Episode | 一个切块对应的 Graphiti `EpisodicNode`，命名为 `{source_id}:{chunk_index}`，其 `valid_at` 等于信源的 `reference_time` | Graphiti |
 | Entity | Graphiti `EntityNode` | Graphiti（+ 合并投影） |
 | Fact | Graphiti `EntityEdge`：关系名、中文 `fact`、`valid_at`/`invalid_at`、`episodes`、`attributes` | Graphiti |
-| Support | `IG_FactSupport`：每当某个 Episode 新建一条事实、或作为重复项再次确认它时，就生成一条，带信源等级、推测/推演标记和自动定位的摘录 | IntelGraph |
+| Support | `IG_FactSupport`：每当某个 Episode 新建一条事实、或作为重复项再次确认它时，就生成一条，带信源等级、推测/推演标记和自动定位的摘录；信源对该论断明确写出结束时间时，还带 `stated_end`（见六 P1） | IntelGraph |
 | Conflict | 类型、建议、状态、裁决历史 | IntelGraph |
-| 决策记录 | 失效的保留/写回、裁决、合并、等级调整、跳过审阅、撤销；存储变更前后的值 | IntelGraph |
+| 决策记录 | 失效的保留/写回、陈述终点的落实/转入待确认/确认/驳回、裁决、合并、等级调整、跳过审阅、撤销；存储变更前后的值 | IntelGraph |
 | Revision | 每个切块的策略执行完后发布一次，每次分析师修改后也发布一次 | IntelGraph |
 
 ### 3.2 归属与写回
@@ -153,7 +155,7 @@ v1 的核心闭环：**录入信源 → 查看任意事件时间的图谱 → �
   * `IG_Merge`
   * `IG_Layout`
   * `IG_Decision`
-* **唯一的写回。** P3 或 P6 推翻 Graphiti 的失效判定时，由适配层把 `invalid_at`/`expired_at` 写回 Graphiti 的边；原值存入决策记录，撤销时还原。
+* **唯一的写回。** P3 或 P6 推翻 Graphiti 的失效判定，或落实一条陈述终点时，由适配层把 `invalid_at`/`expired_at` 写回 Graphiti 的边；原值存入决策记录，撤销时还原。
 * **为什么要写回。** Graphiti 后续的矛盾判断从数据库读取这两个字段，它看不到覆盖层；写回后，它的判断才能与分析师看到的状态一致。
 * **其余字段只读。** Graphiti 的其他属性对 IntelGraph 一律只读。
 * **快照构建器**把 Graphiti 数据与合并、支撑、冲突、标记组合成某个版本的有效图，并缓存起来，供快照接口和问答共用。
@@ -203,7 +205,13 @@ Graphiti 的每条边只有一份属性表，由所有重复支撑共用，所�
 * 模板定义：
   * 子类型标签；
   * 额外的关系类型，以及 `edge_type_map`；
-  * 抽取指令：中文描述与摘要、命名规则、原子化事实（一条事实只表达一个论断），以及用 `modality` 表达计划和否认；
+  * 每种关系的**主张键**：识别同一论断的类型化属性，如 `AFFILIATED_WITH` 的 `role`、`SOCIAL_TIE` 的 `kind`；供 P3 陈述终点使用（见六）；
+  * 抽取指令，随每个 Episode 作为 Graphiti 的 `custom_extraction_instructions` 传入：
+    * 中文的事实描述与摘要；
+    * 命名规则（现实中的同一指称对象只建一个实体；规范名取母语形式或最权威的形式，其他语言的写法作为别名），后接案件的已知别名表；
+    * 原子化事实（一条事实只表达一个论断）；
+    * 用 `modality` 表达计划和否认；
+    * 案件的 UTC 偏移，使抽取出的时间为案件本地时间（见五）；
   * 等级标签，以及每种信源类型的默认等级；
   * 时间模式（`absolute` | `story`）和默认刻度。
 
@@ -257,9 +265,9 @@ Graphiti 的每条边只有一份属性表，由所有重复支撑共用，所�
 4. **转写。** 每个草稿只发一次视觉请求，每张图得到三项：
    * `original_text`：原语言逐字文本；
    * `description_zh`：中文的画面描述；
-   * `detected_dates`：识别到的日期。
+   * `detected_dates`：图中识别到的日历日期，可附带时间；单独的钟点（如“21:00”）不算日期。
 
-   只重试失败的那几张。
+   只重试失败的那几张。只要有任何一张图片无效，服务商就会拒绝整个请求，因此每张图片先校验再发送；请求仍因某张图片失败时，把那张标记为失败，其余的不带它重发（见 7.3）。
 5. **审阅。** 分析师编辑 `reviewed_text`。人工修改与模型输出分开保存；修改后不会重新识别。
 6. **确认。** 确认后创建信源，导入的是 `reviewed_text`。可以跳过审阅，但会写入决策记录。
 
@@ -300,7 +308,7 @@ Graphiti 的每条边只有一份属性表，由所有重复支撑共用，所�
 | :--- | :--- | :--- |
 | 文档时间 | `EpisodicNode.valid_at`，来自 `add_episode(reference_time=…)` | 即信源的 `reference_time` |
 | 事件时间起点 | `EntityEdge.valid_at`，由 LLM 以 `reference_time` 为参照抽取 | 为空时，显示上回落到各支撑中最早的 `reference_time`，并标记 `valid_at_inferred`（界面显示“≈”）。Graphiti 的日期判断会跳过起点为空的事实，所以这类事实不会被自动失效，分析师可以用 P5 处理 |
-| 事件时间终点 | `EntityEdge.invalid_at`，来自原文明确写出的结束时间，或 Graphiti 的失效判定 | 失效判定由 P1–P4 处理；策略推翻时写回修正值 |
+| 事件时间终点 | `EntityEdge.invalid_at`，来自原文明确写出的结束时间，或 Graphiti 的失效判定 | 失效判定由 P1–P4 处理；策略推翻时写回修正值。信源对仍然有效的事实明确说出的结束时间，由 P3 **陈述终点**落实（见六） |
 | 系统时间戳 | `created_at`；`expired_at`（处理时的时钟） | 不显示；写回时 `expired_at` 与 `invalid_at` 一起修改 |
 
 ### 5.2 Graphiti 如何检测矛盾
@@ -313,6 +321,7 @@ Graphiti 的检测是有上限、尽力而为的，不能当作完整检测：
   * 两条事实的起点相同或为空；
   * 两条事实的时间区间不重叠；
   * 候选事实的结束时间已经不晚于新事实的起点。
+* **抽取出的起点说了算。** 信源复述一条已有事实并附上结束时间（“X 已于 D 卸任 CEO”）时，抽取结果常常就是那条旧事实：起点*相同*，外加一个明确的结束时间。此时 Graphiti 什么也不失效；如果消歧把它合并进已有事实，这个陈述终点还会被丢掉。P1 捕获这类陈述终点，由 P3 落实（见六）。已在 M0 中验证（[技术验证报告](spikes/m0-report.md)）。
 * **补录旧文档。** 较早的文档后导入时，可能让*它自己*的新事实失效，因为库里已有一条起点更晚的事实。
 * **对顺序敏感。** 结果会随导入顺序和近期 Episode 上下文而变化，不保证每次得到相同的图。
 
@@ -324,7 +333,7 @@ Graphiti 的检测是有上限、尽力而为的，不能当作完整检测：
 ### 5.3 区间与日历规则
 
 * **区间为左闭右开** `[valid_at, invalid_at)`；`invalid_at` 为空表示仍然有效。
-* **精度。** 时间精确到分钟存储；只到“天”的日期，按案件时区的 00:00 计。
+* **精度。** 时间精确到分钟存储；只到“天”的日期，按案件时区的 00:00 计，由适配层保证。抽取指令写明案件的 UTC 偏移，只到日期的值在 Graphiti 判定该事实之前先归一化到案件本地午夜；不归一化的话，`2026-12-15` 这样的日期会被读成 00:00 UTC，在上海就是 08:00（M0 中出现过）。
 * **故事时间。** 案件设定一个锚点日期，故事第 n 天 = 锚点 + (n−1) 天、案件本地时间 00:00。故事案件使用固定偏移时区（默认 UTC+8，不考虑夏令时）。界面显示为“第n天 HH:mm”。
 * **时间轴刻度。** 初始缩放和滑块步长取自模板；刻度标签随可见范围自适应。
 
@@ -360,6 +369,7 @@ Graphiti 的检测是有上限、尽力而为的，不能当作完整检测：
 | `speculative` 推测 | 全部支撑都是推测 |
 | `synthetic` 推演 | 至少一条支撑来自推演信源；这条事实在任何地方出现都标“推演” |
 | `closure_unconfirmed` 失效待确认 | Graphiti 让它失效了，但 P1 无法确定原因，或 P2 无法分类 |
+| `end_claimed` 结束待确认 | 有信源对这条仍然有效的事实明确说出了结束时间，但 P3 没有落实：信源可靠度更低，或匹配不唯一（见六） |
 
 ## 六、矛盾处理策略（v1）
 
@@ -372,6 +382,7 @@ Graphiti 的检测是有上限、尽力而为的，不能当作完整检测：
 
 * P1–P4 在每个切块的 `add_episode` 之后、发布版本之前，按顺序自动执行。
 * 任何一方的最佳等级发生变化时（调整等级、导入中新增支撑、推测标记变化），执行 **P3 复核**并重新计算 P4；合并之后也会重新计算 P4。
+* **P3 陈述终点**在 P3 处理完失效判定之后、同一切块内执行。
 * P5–P6 是分析师操作。
 * 每条规则的结果都写入决策记录。
 
@@ -379,12 +390,21 @@ Graphiti 的检测是有上限、尽力而为的，不能当作完整检测：
 
 在单次 `add_episode` 调用期间，适配层包装 `graphiti_core.graphiti.resolve_extracted_edges`，把它自带的 `invalidated_by` 参数传进去。这个参数在 0.31.2 中已经存在，只是 `add_episode` 没有传。这样就能拿到精确的配对：*被失效的事实 → 导致它失效的新事实*。
 
-**自身失效（补录旧文档）**是另一种情况：Graphiti 因为库里已有一条起点更晚的候选，而让新进来的事实失效。
+**自身失效（补录旧文档）**是另一种情况：Graphiti 因为库里已有一条起点更晚的候选，而让新进来的事实失效。适配层在同一次 resolver 调用内部观察 Graphiti 的时间处理步骤（`_apply_temporal_invalidation`），因为只有在那里才能看到 LLM 选出的候选。
 
-* 如果恰好只有一条已存候选的 `valid_at` 等于新事实的新 `invalid_at`，就认定它是原因。
+* 如果这份候选列表中恰好只有一条互不相同的已存候选，其 `valid_at` 等于新事实的新 `invalid_at`，就认定它是原因。
 * 否则记为**无法归因**。
+* 新事实在时间处理步骤之前就已带有的结束时间来自原文；那是下面说的陈述终点，不是自身失效。
 
-适配层同时记录被失效事实在本切块之前的 `invalid_at`/`expired_at`，供写回和撤销使用。这个钩子依赖固定的 Graphiti 版本，每次升级都要跑契约测试。
+**陈述终点。** 在同一次 resolver 调用中，适配层还记录每条原文明确说出结束时间的新事实：抽取在 Graphiti 的时间处理步骤之前就给它设了 `invalid_at`，且其 `modality` 为 `stated`。Graphiti 不会把这样的结束时间应用到已有事实：新事实作为重复项时，保留已存的边、丢掉新来的结束时间；作为同起点的平行事实时，什么也不失效（见五）。对每条陈述终点，适配层记录：
+
+* 结束时间；
+* 主张：规范化端点、关系和主张键属性；
+* 消歧结果：被合并进已有事实，还是存为独立的事实。
+
+结束时间保留在最终生成的支撑上，即 `stated_end`（见三），由 P3 落实。
+
+**持久化。** 适配层同时记录被失效事实在本切块之前的 `invalid_at`/`expired_at`，供写回和撤销使用；自身失效的事实记录的是时间处理步骤之前的值。这些值、因果映射和陈述终点会在 Graphiti 写入之前作为该切块的**暂存**检查点持久化，Graphiti 提交之后再崩溃也不会丢数据（见 F1）。这个钩子依赖固定的 Graphiti 版本，每次升级都要跑契约测试。
 
 **P2 · 对已归因的配对分类。**
 
@@ -412,14 +432,34 @@ Graphiti 的检测是有上限、尽力而为的，不能当作完整检测：
 
 写回由适配层在切块之间、串行状态下执行，变更前后的值都会记录。
 
-**P3 复核。** 适用于 P3 按 `CHANGE` 第一行**自动保留**的失效判定；任何一方的最佳等级发生变化时，都要重新检查。
+**P3 · 陈述终点。**
+
+把 P1 捕获的陈述终点落实到仍然有效的事实上。推测支撑，以及 `modality` 不为 `stated` 的陈述终点，一律忽略。
+
+**目标**是同时满足以下条件的唯一一条开放事实（`invalid_at` 为空）：
+
+* 规范化端点（合并之后）和关系都与陈述终点相同；
+* 主张键属性与陈述终点的相等；
+* 起点早于陈述终点。
+
+每种关系的主张键由模板定义，例如 `AFFILIATED_WITH` 的 `role`、`SOCIAL_TIE` 的 `kind`。没有定义主张键的关系，只按端点和关系匹配。
+
+| 情况 | 结果 |
+| :--- | :--- |
+| 恰好一个目标，且陈述终点的支撑等级不低于目标事实的最佳等级 | 把陈述终点**写回**到目标事实：`invalid_at` = 陈述终点，`expired_at` = 当前时间。结果自动保留，因此受 P3 复核约束 |
+| 恰好一个目标，但该支撑可靠度更低 | 不写回；给目标事实设置 `end_claimed`。分析师可在审阅列表中选择*确认结束*（写入该结束时间）或*驳回*（见 F4） |
+| 候选不止一个，例如一句捆绑陈述覆盖多个职位 | 不写回；给每条候选事实都设置 `end_claimed`，由分析师按上面的方式处理 |
+| 没有候选 | 无可落实；存为独立事实的陈述终点就保持为那条事实 |
+
+**P3 复核。** 适用于 P3 按 `CHANGE` 第一行**自动保留**的失效判定，以及 P3 自动落实的每条陈述终点；任何一方的最佳等级发生变化时，都要重新检查。
 
 * **条件不再成立时：** 如果“胜方等级不低于败方”已经不成立，就按 `CHANGE` 胜方可靠度更低的那一行处理：写回败方失效前的值，并开一个 `contested_change` 冲突。
+  * 对陈述终点，条件是支撑等级不低于目标事实的最佳等级；不再成立时，写回目标事实失效前的值，并设置 `end_claimed`。
   * 例如胜方的信源被降级；
   * 又如败方获得了更高等级的支撑，比如 Graphiti 把一个新的 T1 信源识别为重复事实并合并到败方。
   * 复核会写入决策记录；撤销触发它的那次等级调整时，复核的处理也一并撤销。
-* **只在一个方向上自动处理：** 等级变化只会*开启*审阅，从不自动让事实失效，也从不自动解决冲突。`contested_change` 冲突的胜方等级后来提高到不低于对方时，只更新 P4 的建议。
-* **不在复核范围内：** 分析师通过 P6 接受的变化（`change_accepted`），以及已裁决的冲突。
+* **只在一个方向上自动处理：** 等级变化只会*开启*审阅，从不自动让事实失效，也从不自动解决冲突。`contested_change` 冲突的胜方等级后来提高到不低于对方时，只更新 P4 的建议；已设置 `end_claimed` 的支撑后来提高到不低于对方时，仍留在审阅中。
+* **不在复核范围内：** 分析师通过 P6 接受的变化（`change_accepted`）、分析师已确认或已驳回的陈述终点，以及已裁决的冲突。
 
 **P4 · 建议胜出方。**
 
@@ -512,6 +552,8 @@ graph TD
 | `snapshot` | 构建并缓存各版本的有效图，发布 `graph.changed` | 写数据 |
 | `qa` | 基于缓存快照组装上下文、流式输出、校验引用 | 调用 Graphiti 的检索 |
 | `templates` | Pydantic 模板定义与注册表 | 包含可执行逻辑 |
+| `overlay` | `IG_*` 节点的仓储：Cypher 读写、事务、案件范围、稳定键 | 包含业务逻辑 |
+| `contracts` | 共享的 Pydantic 模型：API 结构（八）、SSE 载荷、错误、`graph` 与 `policy` 之间的捕获 DTO | 包含逻辑；引入 `graphiti_core` |
 | `api` | FastAPI 路由；OpenAPI 定义的来源 | 包含业务逻辑 |
 
 前端类型由后端的 OpenAPI 定义生成；SSE 事件内容共用同一个 schema 模块。
@@ -530,12 +572,17 @@ graph TD
 | 时间轴和路径在前端计算 | 整个案件放得进内存，两者使用同一套时间语义 |
 | 视觉处理放在 Graphiti 之前 | Graphiti 的导入接口只接受文本 |
 
-### 7.3 集成要点（均在 M0 中验证）
+### 7.3 集成要点（已在 M0 中验证，见[技术验证报告](spikes/m0-report.md)）
 
 * **Graphiti 的 LLM。** 配置为 `OpenAIGenericClient(config=LLMConfig(api_key=…, base_url=…, model=…), structured_output_mode="json_object")`。
   * **必须用 `json_object`**：DeepSeek 的 Chat Completions 只支持 `text` 和 `json_object`，没有 `json_schema`。
   * **Graphiti 只用一个模型**：这个客户端不会把请求分流给 `small_model`。
   * IntelGraph 自己的调用走 OpenAI SDK，其中 P2 分类可以使用 `LLM_SMALL_MODEL`。
+  * **类型化属性必须归一化。** `json_object` 模式下，Graphiti 会把原始 JSON Schema 直接贴进提示词；DeepSeek 随后常把属性值再包一层 `properties`（或 `attributes`，或类型名）。Graphiti 会保留未声明的键，于是这层嵌套映射进了 Neo4j，整个 Episode 随之回滚。
+    * 适配层重写 `generate_response`，对属性抽取调用解开这样的一层嵌套。
+    * 只保留通过严格校验的已声明字段。
+    * 每次解嵌套和每个被丢弃的键都写日志。
+  * **“完成”以提交为准。** 抽取成功是指 Episode 已提交，而不只是收到一段可解析的 JSON。
 * **思考强度。** DeepSeek 默认开启思考（强度为 `high`），所以每次调用都必须明确指定档位。
   * 后端的**服务商配置**（`LLM_PROVIDER_PROFILE`）负责把档位映射为请求参数。DeepSeek 的对应关系如下，环境调试时均已验证可用：
 
@@ -549,17 +596,33 @@ graph TD
   * 思考模式下服务商会忽略 `temperature`，结果波动更大。
   * 抽取在 `off` 以外的各档下都必须仍能输出合法的 `json_object`，这一点在 M0 中逐档验证。
   * 视觉转写一律使用 `off`。
-* **输出语言。** Graphiti 会追加“沿用原文语言”的指令。适配层要覆盖它，使事实描述和摘要输出中文，实体名保留母语形式。计划的做法是包装客户端的语言钩子，并用一个中文切块和一个英文切块分别验证。
+* **输出语言。** Graphiti 会追加“沿用原文语言”的指令：模块级的 `get_extraction_language_instruction`，由 `openai_generic_client.py` 调用。适配层在请求时通过按实例的 SDK 钩子替换这个后缀，使事实描述和摘要输出中文，实体名保留母语形式。
+  * 后缀不再匹配时钩子会抛错，Graphiti 升级会因此立刻暴露。
+* **命名与时间指令。** 每次 `add_episode` 都把模板的抽取指令作为 `custom_extraction_instructions` 传入（见三）：
+  * 命名规则，附案件的已知别名表；
+  * 案件的 UTC 偏移。
+
+  M0 中，没有已知别名表时，黄仁勋和 Jensen Huang 成了两个节点；加上之后不再出现重复，别名也得到了保留。
+* **时间归一化。** 只到日期的值在 Graphiti 判定该事实之前先归一化到案件本地午夜（见五）。契约测试用一个只含日期的英文时间和一个中文本地钟点各检查一次。
+* **捕获钩子的位置。**
+  * 适配层在一次串行的 `add_episode` 外围打包（patch）`graphiti_core.graphiti.resolve_extracted_edges`。
+  * 在该调用内部观察 `_apply_temporal_invalidation`（用于自身失效）和逐边消歧（用于陈述终点）。
+  * 在 Graphiti 写入之前持久化暂存检查点。
+  * 写回是一条带范围的 Cypher 语句，只修改 `RELATES_TO {uuid, group_id}` 上的 `invalid_at` 和 `expired_at`，并返回修改前后的值。
 * **向量模型。** 用 `OpenAIEmbedder` 接多语言端点，默认是阿里百炼 `qwen3.7-text-embedding`（1024 维）。
   * 要用 OpenAI 兼容路径 `/compatible-mode/v1`，不要用 DashScope 原生的 `/api/v1`。
   * Graphiti 不会发送 `dimensions` 参数，而是把向量截断成 `EMBEDDING_DIM` 维，所以模型的**原生**输出维度必须等于 `EMBEDDING_DIM`。
   * 模型和维度都要固定。
-* **重排序。** 注入一个保持原有顺序的 `CrossEncoderClient` 桩实现，这样就不需要 OpenAI 密钥。IntelGraph 不使用 Graphiti 的检索打分。
+* **重排序。** 注入一个保持原有顺序的 `CrossEncoderClient` 桩实现，这样就不需要 OpenAI 密钥。IntelGraph 不使用 Graphiti 的检索打分。`Graphiti.search()` 从不调用这个桩，所以冒烟测试用带重排序配方的 `search_()`。
 * **摘录定位。** 每个切块处理完后，`policy` 把切块中的句子各生成一次向量；每条新支撑取与事实描述最接近的那句作为摘录（`located: "auto"`）。没有句子超过阈值时，退回整个切块（`located: "none"`）。这一步不调用 LLM。
-* **全文检索。** Graphiti 用默认分析器建全文索引。M0 中测试中文召回率，必要时只把相关的索引改用 `cjk` 分析器重建。
-* **遥测。** Graphiti 默认开启遥测。必须在引入 Graphiti 之前设置 `GRAPHITI_TELEMETRY_ENABLED=false`。
+* **全文检索。** 沿用 Graphiti 的默认分析器。M0 在 30 条中文查询上对比，`cjk` 的 recall@10 和 MRR 与默认分析器完全相同，只是收窄了候选集。具名索引从不改动：它们以 `IF NOT EXISTS` 创建，而 Neo4j 实例是共用的。
+* **遥测。** Graphiti 默认开启遥测。必须在引入 Graphiti 之前设置 `GRAPHITI_TELEMETRY_ENABLED=false`。验收检查要在普通进程中执行：Graphiti 在 pytest 下会强制关闭遥测，可能掩盖漏配。
 * **案件隔离。** 适配层的每次调用都必须显式传入 `group_id`，没有就拒绝执行。每个接口资源都要核对它所属的案件。
-* **视觉。** 通过 OpenAI SDK 的 `image_url` 内容直接调用。DeepSeek 文档标明支持视觉，识别质量和限制在 M0 中检查。
+  * Graphiti 对省略范围的行为因操作而异：`add_episode` 写入默认分组 `''`；`search` 读取**所有**分组，传 `[]` 和 `[""]` 也一样。
+  * 全文过滤先按分词短语匹配 `group_id`，再用 Cypher 精确过滤。一个 group ID 的词是另一个的延伸（`…-x` 与 `…-x-2`）时不会串数据，但可能挤占对方的候选数量上限。
+  * 因此案件 ID 使用定长词元，如 `uuid4().hex`。适配层自有的查询一律在精确分组过滤之后再套用结果上限。
+* **视觉。** 通过 OpenAI SDK 直接调用，每个草稿只发一次请求：`image_url` 以 base64 传入，`json_object`，temperature 0，思考强度 `off`。M0 用 `LLM_MODEL` 转写 3/3 张图片均为逐字准确。
+  * 只要有任何一张图片无效，服务商就会以指明 `content[i]` 的 400 拒绝**整个**请求，因此每张脱敏图片先校验再发送；遇到这种 400 时，把指名的那张标记为失败，其余的不带它重发（见 4.2）。
 
 ### 7.4 运行模式
 
@@ -591,17 +654,19 @@ graph TD
   * 按段落边界切成约 1,500 token 的块；过长的段落在句子边界处再切。
   * 每个块记录它在规范化文本中的字符偏移。
 * **导入任务：** 启动时固定模板版本、指引版本，以及抽取和分类的思考强度（每个切块都会记录这些值），然后一次处理一个切块：
-  1. `add_episode(name="{source_id}:{chunk_index}", …)`
-  2. P1–P4
+  1. `add_episode(name="{source_id}:{chunk_index}", …)`。适配层在其内部、Graphiti 写入*之前*持久化**暂存**检查点：Episode UUID、固定的版本和档位、P1 捕获（因果映射、切块前的值、陈述终点）和支撑的 UUID（见六 P1）。Graphiti 的 Episode 写入是一个事务，其中的失败会整体回滚。
+  2. P1–P4，使用暂存的捕获
   3. 支撑与摘录定位
-  4. 写检查点
+  4. **完成**检查点，尽可能与策略的写回、决策和支撑在同一事务中提交
   5. 发布版本
 
   因此每处理完一个切块，图谱就会可见地增长一次。
 * **进度：** 信源状态依次为 `queued → parsing → extracting → applying_policy → committed`，另外两种结局是 `partial` 和 `failed`。`current_chunk`、`chunk_count`、`error` 持久保存，并通过 `source.progress` 推送。
 * **续传**（`POST /sources/{id}/resume`）：
-  * 从第一个没有检查点的切块开始。
-  * 如果名为 `{source_id}:{chunk_index}` 的 Episode 已经存在（Graphiti 已提交但策略没跑完），就跳过 `add_episode`，只重跑 P1–P4；策略对每个切块是幂等的。
+  * 从第一个没有**完成**检查点的切块开始；按 `(group_id, name)` 查找 Episode：
+    * **没有 Episode。** Graphiti 从未提交。重新执行 `add_episode`，新的尝试会替换已成孤儿的暂存检查点。
+    * **恰有一个 Episode，且 UUID 与暂存检查点匹配。** Graphiti 已提交，但策略没跑完。跳过 `add_episode`，从暂存的捕获重跑 P2–P4；策略对每个切块是幂等的：决策和支撑以稳定的“切块 + 效果”ID 为键。
+    * **多个 Episode、缺少暂存检查点，或 UUID 不匹配。** 信源在任何版本发布之前变为 `failed`，错误码 `capture_mismatch`；该案件后面的切块排在它之后等待。
   * 服务重启时被中断的任务会变为 `partial` 或 `failed`，可以续传。
 * **重试：** 每个切块最多重试 2 次，指数退避。
 * **时延：** 每个切块需要多次 LLM 调用，通常 10–60 秒；界面从不阻塞。
@@ -650,7 +715,7 @@ graph TD
 
 * **审阅列表（左栏）**分两组，数量显示在面板标题上：
   * **冲突：** 未解决的在前，已解决的在后；
-  * **待确认失效：** 带 `closure_unconfirmed` 标记的事实，来自 P1/P3。
+  * **待确认失效：** 带 `closure_unconfirmed` 标记的事实（来自 P1/P3），以及带 `end_claimed` 标记的事实（来自 P3 陈述终点）。
 * **冲突详情（检查器）：**
   * 并排显示双方事实，每条包括：
     * 最佳等级；
@@ -667,6 +732,7 @@ graph TD
   * *保持待定*；
   * 撤销这个冲突上最近一次的决策。
 * **待确认失效的详情：** 显示该事实、Graphiti 给出的结束时间，以及候选原因（如果有）。操作为*确认失效*或*撤销失效*（写回），两者都可撤销。
+* **待确认结束的详情：** 显示这条开放事实和每条主张该结束的支撑：信源、等级、陈述终点和摘录，以及 P3 没有落实它的原因（可靠度更低，或候选事实不止一条）。每条支撑的操作为*确认结束*（写入该陈述终点）或*驳回*；两者都须填写理由，且可撤销。
 * **选中冲突时：** 画布高亮双方事实，但不移动滑块。检查器提供“跳到 A 的时间”“跳到 B 的时间”，并预览当前 T 时刻不可见的事实。
 
 ### F5 路径发现
@@ -783,7 +849,8 @@ type Snapshot = {
   case: { id: string; name: string; template: string; template_version: string; timezone: string;
           time_mode: 'absolute' | 'story'; story_anchor_ts?: number;
           settings: { thinking: { extraction: ThinkingLevel; classification: ThinkingLevel;
-                                  qa_default: ThinkingLevel } } };   // 默认均为 'off'
+                                  qa_default: ThinkingLevel };        // 默认均为 'off'
+                      known_aliases: string[][] } };  // 每组规范名在前；建案时传入
   version: number;
   entities: Entity[]; facts: Fact[]; conflicts: Conflict[]; sources: Source[];
   layout: { version: number; positions: Record<string, { x: number; y: number }> };
@@ -801,9 +868,10 @@ type Fact = {
   invalid_at_ts: number | null;
   best_tier: 1 | 2 | 3 | null;
   supports: { source_id: string; episode_id: string; tier: 1 | 2 | 3;
-              speculative: boolean; synthetic: boolean }[];
+              speculative: boolean; synthetic: boolean;
+              stated_end_ts: number | null }[];                // P1 陈述终点，如有
   status: 'reported' | 'corroborated' | 'disputed' | 'refuted';
-  speculative: boolean; synthetic: boolean; closure_unconfirmed: boolean;
+  speculative: boolean; synthetic: boolean; closure_unconfirmed: boolean; end_claimed: boolean;
   conflict_ids: string[];
 };
 type Conflict = {
@@ -844,7 +912,7 @@ type ImageDraft = {
 | :--- | :--- |
 | `GET /templates` | 模板及其版本 |
 | `GET /providers/llm` | `{model, thinking_levels: ThinkingLevel[]}`；列表为空表示该服务商不支持思考，界面隐藏选择器 |
-| `POST /cases` · `GET /cases/{id}` | 新建 / 读取案件 |
+| `POST /cases` · `GET /cases/{id}` | 新建 / 读取案件。新建时可选传入 `known_aliases`（每组规范名在前）；抽取时使用这些别名，加上由已生效合并推导出的别名组（见三） |
 | `PUT /cases/{id}/settings` | `{thinking: {extraction, classification, qa_default}}`；只对之后启动的任务生效，并写入决策记录 |
 | `GET /cases/{id}/brief` · `PUT /cases/{id}/brief` | 案件指引（带版本） |
 | `GET /cases/{id}/snapshot` | 最新的有效图；支持 `ETag` / `If-None-Match` |
@@ -859,7 +927,7 @@ type ImageDraft = {
 | `POST /cases/{id}/evidence` | `{fact_ids}` → `Evidence[]`（批量） |
 | `POST /cases/{id}/conflicts` | P5 手动标记冲突 `{fact_ids}` |
 | `POST /conflicts/{id}/adjudicate` | P6 裁决 `{outcome \| "hold", note}` |
-| `POST /facts/{id}/closure` | 处理待确认的失效 `{action: "confirm" \| "revert", note?}` |
+| `POST /facts/{id}/closure` | 处理待确认的失效 `{action: "confirm" \| "revert", note?}`，或处理待确认的结束 `{action: "apply_end" \| "dismiss_end", support_id, note}` |
 | `POST /cases/{id}/merges` | `{alias_id, canonical_id, canonical_name?, version}` |
 | `POST /decisions/{id}/undo` | 撤销任意可撤销的决策：裁决、失效处理、等级调整、合并、重新布局、设置修改 |
 | `GET /cases/{id}/decisions` | 审计记录，可按对象和类型筛选 |
@@ -942,6 +1010,7 @@ type ImageDraft = {
 * 等级角标（T1–T3）；
 * `synthetic` 时显示“推演”；
 * `closure_unconfirmed` 时显示“⚠失效待确认”；
+* `end_claimed` 时显示“⚠结束待确认”；
 * `valid_at_inferred` 时日期前显示“≈”。
 
 已驳斥或有争议的事实如果同时已失效，保留原有线型，并在标签后加“（历史）”。
@@ -967,7 +1036,7 @@ type ImageDraft = {
 | 路径 | 前端 ≤ 50 ms |
 | 问答 | `context` ≤ 300 ms；记录到首个推理事件、到首个回答字符、完整回答的耗时；目标：思考强度为 `off` 时，回答首字 p50 ≤ 2 s（在 M3 卡口）；更高档位只记录、不卡口 |
 | 导入 | 阶段变化 1 s 内可见；记录每个切块的耗时，但不作为卡口；场景目标见 A6 |
-| 可靠性 | SSE 断线续传或 `resync`；新建信源幂等；切块检查点与续传；策略对每个切块幂等 |
+| 可靠性 | SSE 断线续传或 `resync`；新建信源幂等；两阶段切块检查点（Graphiti 写入前暂存捕获，发布前标记完成）与续传；策略对每个切块幂等 |
 | 持久性 | **持久保存：** 案件、指引、信源、草稿（24 小时）、Graphiti 图、`IG_*` 状态、布局、决策。**只在会话内保留：** 问答回答、当前选择。**存在浏览器 localStorage：** 过滤条件、滑块位置、面板状态 |
 | 低波动 | temperature 一律显式设置（抽取、转写、分类为 0）。思考强度默认为 `off`；在其他档位下，服务商会忽略 temperature，结果波动增大。每个切块都记录模型、提示词、模板版本和思考强度。结果低波动，但不保证完全相同 |
 | 可审计 | 每次策略决定和分析师操作都写一条决策记录，包含操作者、时间、输入、前后值 |
@@ -978,19 +1047,16 @@ type ImageDraft = {
 
 ### 12.1 场景 A：英伟达，高层变动、监管与 AI 芯片博弈（`corporate_intel`）
 
-本场景使用真实的公司和人物，贴近时事。
+本场景使用真实的公司和人物。S0–S3 是公开背景材料，S4–S7 标记为推演。
 
-**背景（S0–S3）：真实的公开信源。** 在 M0 **冻结**：每份都记录 URL、发布日期、保存文本的 SHA-256，以及它必须产出的具体断言。日期和措辞以原文为准，中英文信源混合。候选线索：
+**背景（S0–S3）是真实的公开信源。** M0 冻结了以下四份材料，每份均记录 URL、发布日期、保存文本的 SHA-256 和预期断言。
 
-* 英伟达最新一期 10-K（黄仁勋为创始人，自 1993 年起任 CEO）；
-* 国家市场监督管理总局对英伟达的反垄断调查；
-* 美国对 H20 等芯片的出口管制，以及英伟达的相关申报；
-* 网信办就 H20 安全风险约谈英伟达；
-* UXL Foundation 推进 CUDA 替代方案的进展。
+* S0：英伟达 FY2026 Form 10-K 的高管资料摘录。
+* S1：国家市场监督管理总局的反垄断立案调查公告。
+* S2：英伟达披露 H20 出口许可要求的 Form 8-K。
+* S3：oneAPI 博客发布的 UXL Foundation 成立公告，其中列出的 Google 是 S6 使用的厂商 *V*。
 
-**S3 必须明确写出某家云厂商是 UXL 成员。** 这家厂商（下文记为 *V*）在 M0 中确定，并在 S6 中原样使用。
-
-**推演（S4–S7）：合成信源。** 日期以 D 为基准，D 取在最新背景材料之后。
+**推演（S4–S7）使用合成信源。** v1.5.2 样例以 Asia/Shanghai 时区的 `2026-12-01` 作为 D。
 
 * 全部标记 `synthetic: true`；
 * 由它们支撑的事实，在界面、路径和问答中都标“推演”；
@@ -1006,11 +1072,11 @@ type ImageDraft = {
 
 | # | 时点 | 断言 |
 | :--- | :--- | :--- |
-| A1 | S0–S3 后 | 关键实体齐全，带中文摘要，规范名和别名正确。`Jensen Huang –AFFILIATED_WITH{role: CEO}→ Nvidia` 有效且已印证。*V* `–AFFILIATED_WITH{role: member}→` UXL Foundation 存在，由 S3 支撑 |
-| A2 | S4 后 | 草稿完成转写、审阅、确认。黄仁勋 / 英伟达归并为 Jensen Huang / Nvidia（直接归并，或经一次手动合并）。爆料拆成 *F_plan*（`modality: planned`）和 *F_reason*，均为 T3。**对任意 T < D+14，CEO 事实都有效**：如果 Graphiti 让它失效了，P2 应判为 `COMPATIBLE` 或 `CHANGE`，再由 P3 写回；判为 `CHANGE` 时同时开一个 `contested_change` 冲突 |
+| A1 | S0–S3 后 | 关键实体齐全，带中文摘要，规范名正确。S0–S3 中出现过的每种别名写法都有记录（如 `Jen-Hsun Huang`）；更晚的信源中才首次出现的写法，在那批信源之后检查。`Jensen Huang –AFFILIATED_WITH{role: CEO}→ Nvidia` 有效且已印证。*V* `–AFFILIATED_WITH{role: member}→` UXL Foundation 存在，由 S3 支撑 |
+| A2 | S4 后 | 草稿完成转写、审阅、确认。黄仁勋 / 英伟达归并为 Jensen Huang / Nvidia（直接归并，或经一次手动合并）。爆料拆成 *F_plan*（`modality: planned`）和 *F_reason*，均为 T3。**对 [该事实起点, D+14) 内的任意 T，CEO 事实都有效**：如果 Graphiti 让它失效了，P2 应判为 `COMPATIBLE` 或 `CHANGE`，再由 P3 写回；判为 `CHANGE` 时同时开一个 `contested_change` 冲突 |
 | A3 | S5 后 | *F_plan* 与 *F_denial* 之间有一个未解决的 `disagreement` 冲突 C1（由 P1–P3 产生；Graphiti 漏检时由 P5 产生）。双方都是 `disputed`；建议胜出方为 *F_denial*，普通强度；不做任何自动裁决 |
 | A4 | S6 后 | 在 T = D+7 能找到最短路径 *Mercer → 基金会 → V → UXL Foundation*（3 跳）。第 1 跳的区间为 `[D−3y, D−1y)`，标注*历史*；第 3 跳由 S3 支撑，即这条路径跨越了多份文档 |
-| A5 | S7 后 | CEO 事实在 D+14 结束：T = D+13 时有效，T = D+14 时已失效（灰色虚线）。即使 A2 中做过写回，也应如此。新的任职事实自 D+14 起有效。分析师以结果 `a`（*F_plan* 成立）裁决 C1、并在理由中引用 S7 之后，*F_denial* 变为 `refuted`，*F_reason* 仍为 `reported` |
+| A5 | S7 后 | CEO 事实恰好在案件本地（Asia/Shanghai）的 D+14 00:00 结束（`2026-12-14T16:00Z`）：T = D+14 − 1 分钟时有效，T = D+14 00:00 时已失效（灰色虚线）；即使 A2 中做过写回，也应如此。新的任职事实从同一时刻起有效。分析师以结果 `a`（*F_plan* 成立）裁决 C1、并在理由中引用 S7 之后，*F_denial* 变为 `refuted`，*F_reason* 仍为 `reported` |
 | A6 | S7 导入期间 | 每个阶段的进度都可见；已有节点坐标不变；记录从确认到 `committed` 的耗时，目标是在基准条件下 ≤ 3 分钟 |
 | A7 | S7 后，基于已发布的版本 | 对 {Jensen Huang, Nvidia, 美国司法部反垄断局} 提问，返回中文判断：每条都有引用，无效编号为零，凡引用 S4–S7 事实的判断都带“含推演” |
 
@@ -1031,14 +1097,14 @@ type ImageDraft = {
 | :--- | :--- |
 | B1 | 时间轴按分钟刻度显示，标签为“第1天 HH:mm”；每段陈述都产出带左闭右开区间的 `LOCATED_AT` 事实 |
 | B2 | 李四的陈述与线索卡 1 冲突（由策略产生，或经 P5）；建议胜出方为线索卡 1（T2 优于 T3）；界面显示发言人李四 |
-| B3 | 笔记中的事实以推测样式显示。默认排除推测时，张三 → 拆信刀的路径更长或不存在；纳入推测时，路径会经过这条笔记事实。推测事实永远不参与印证 |
+| B3 | 只出现在笔记中的物品，以笔记的事实及其 UUID 识别，而不是按显示名称；抽取时可能给它带限定词的名字，如 `书房的拆信刀`。笔记中的事实以推测样式显示。默认排除推测时，张三 → 拆信刀的路径更长或不存在；纳入推测时，路径会经过这条笔记事实。推测事实永远不参与印证 |
 
 ### 12.3 测试层次
 
 | 层次 | 内容 | 依赖 |
 | :--- | :--- | :--- |
-| 策略单元测试 | 用手写的图状态测试 P1–P6：先写回、之后再发生真正的状态变化（A5 的风险点）；两条同日期的新事实；补录导致的自身失效；`COMPATIBLE`；P6 的每种结果及其撤销；多个冲突同时存在时的优先级；**P3 复核**：胜方被降级、或败方获得新的 T1 支撑时，自动保留的失效判定要重新开启为 `contested_change`，而等级提高从不自动让事实失效；`valid_at` 为空的事实，在时间轴和路径中按推断出的起点处理 | 无 |
-| 适配层契约测试 | 用固定版本的 `graphiti-core` + Neo4j，配合脚本化的假 LLM：`invalidated_by` 钩子确实生效；写回后 Graphiti 下一次判断能看到修正值；两个 `group_id` 相互隔离；Graphiti 已提交、策略尚未执行时能正确续传 | Neo4j |
+| 策略单元测试 | 用手写的图状态测试 P1–P6：先写回、之后再发生真正的状态变化（A5 的风险点）；两条同日期的新事实；补录导致的自身失效；`COMPATIBLE`；P6 的每种结果及其撤销；多个冲突同时存在时的优先级；**P3 复核**：胜方被降级、或败方获得新的 T1 支撑时，自动保留的失效判定要重新开启为 `contested_change`，而等级提高从不自动让事实失效；`valid_at` 为空的事实，在时间轴和路径中按推断出的起点处理；**P3 陈述终点**：T1 的陈述终点让唯一目标失效（合并为重复项、或存为同起点的平行事实两种情形都要覆盖），T3 的陈述终点只设置 `end_claimed`，一条捆绑主张匹配多条事实时给每条都设置 `end_claimed`，`planned`/`denied` 的 modality 被忽略，*确认结束* / *驳回* / 撤销均可用 | 无 |
+| 适配层契约测试 | 用固定版本的 `graphiti-core` + Neo4j，配合脚本化的假 LLM：`invalidated_by` 钩子确实生效；写回后 Graphiti 下一次判断能看到修正值；两个 `group_id` 相互隔离；Graphiti 已提交、策略尚未执行时能正确续传（UUID 匹配 → 重放；暂存检查点成为孤儿 → 重试；不匹配 → `capture_mismatch`）；消歧把新事实合并进已有事实时，陈述终点被捕获；只到日期的生效日期归一化到案件本地午夜 | Neo4j |
 | 前端端到端（fixture 模式） | 只测读路径：渲染与样式、A/B 各时点的时间轴、A4/B3 的路径、冲突展示、录制问答流中的引用标记 | 无 |
 | live 检查清单 | 每次发布前端到端走一遍 A1–A7、B1–B3 | 模型服务 + Neo4j |
 
@@ -1046,7 +1112,7 @@ type ImageDraft = {
 
 | 里程碑 | 内容 | 退出标准（需交付的具体产物） |
 | :--- | :--- | :--- |
-| M0 技术验证与数据 | 1. 通过 `OpenAIGenericClient` 接入 DeepSeek：`json_object` 模式、由适配层注入思考强度、各档位下抽取结果是否为合法 JSON，并用一个中文切块和一个英文切块验证语言覆盖和命名规则；2. 视觉（一张图片）；3. 多语言向量模型与重排序桩；4. `invalidated_by` 钩子，以及写回对 Graphiti 可见；5. 两个案件相互隔离；6. Graphiti 已提交后的续传；7. 中文全文召回（默认分析器 vs `cjk`）；8. 关闭遥测；9. 冻结 S0–S3，编写 S4–S7 和场景 B | 技术验证报告（每项一节）+ 冻结的测试信源 |
+| M0 技术验证与数据 — **已完成（2026-11-21）**（[报告](spikes/m0-report.md)） | 1. 通过 `OpenAIGenericClient` 接入 DeepSeek：`json_object` 模式、由适配层注入思考强度、各档位下抽取结果是否为合法 JSON，并用一个中文切块和一个英文切块验证语言覆盖和命名规则；2. 视觉（一张图片）；3. 多语言向量模型与重排序桩；4. `invalidated_by` 钩子，以及写回对 Graphiti 可见；5. 两个案件相互隔离；6. Graphiti 已提交后的续传；7. 中文全文召回（默认分析器 vs `cjk`）；8. 关闭遥测；9. 冻结 S0–S3，编写 S4–S7 和场景 B | 技术验证报告（每项一节）+ 冻结的测试信源 |
 | M1 后端核心 | 录入（草稿、切块、检查点、续传）、`graph` 适配层、P1–P6、支撑与摘录、决策与撤销、快照与版本、SSE | 策略单元测试和适配层契约测试通过；A1–A3 及 A5 的后端部分通过 API 验证 |
 | M2 前端核心（可基于手写 fixture 并行启动） | 画布、布局、时间轴、过滤、审阅、路径、合并、检查器 | fixture 端到端测试通过；A4、A6、B1–B3 在界面上通过；满足第十一章中除问答外的前端预算 |
 | M3 问答与验收 | 有据问答、导出 fixture、live 检查清单 | A5（裁决部分）、A7 和场景 B 全部通过；达到问答时延目标 |
@@ -1054,15 +1120,19 @@ type ImageDraft = {
 | 风险 | 应对 |
 | :--- | :--- |
 | Graphiti 升级破坏 `invalidated_by` 钩子或写回的前提 | 固定 0.31.2；两者都隔离在 `graph` 适配层内；升级前先跑契约测试 |
-| DeepSeek 兼容性（结构化输出、视觉、模型 ID、思考参数） | 基础项已在环境调试中验证；M0 逐档验证抽取；端点、模型和服务商配置都只是配置项 |
+| DeepSeek 兼容性（结构化输出、视觉、模型 ID、思考参数） | 已在 M0 中验证：各思考档位下 `json_object` 均可用，视觉用 `LLM_MODEL` 转写。类型化属性归一化是必需的（schema 回显）。端点、模型和服务商配置都只是配置项 |
 | 中文抽取质量与命名漂移 | 模板指令、语言覆盖、已知别名表；日期和别名在界面上可见，可通过合并纠正 |
-| 中文全文检索或跨语言匹配效果弱 | 多语言向量模型；M0 证明有提升时启用 `cjk`；手动合并 |
-| Graphiti 漏检或误判矛盾 | P5 手动冲突；待确认失效审阅；只给建议；一切可撤销 |
+| 中文全文检索或跨语言匹配效果弱 | 多语言向量模型；已知别名表写进抽取指令（裸缩写如 SAMR 的向量质量差）；手动合并。M0 表明 `cjk` 没有收益 |
+| Graphiti 漏检或误判矛盾 | P5 手动冲突；待确认失效审阅；只给建议；一切可撤销。实际调用每次结果有波动（M0），因此契约测试使用脚本化的 LLM |
+| Graphiti 丢掉陈述终点（消歧合并），或同起点时不做任何失效 | P1 捕获陈述终点、P3 陈述终点按等级落实，配 `end_claimed` 审阅 |
+| 只到日期的时间被读成 UTC（在 Asia/Shanghai 偏差 8 小时，M0 中出现过） | 抽取指令写明案件偏移；适配层归一化；A5 固定到案件本地时刻 |
 | 导入时延与成本 | 分阶段进度；Graphiti 只用一个模型；小模型仅用于 P2；每个切块一份重试预算 |
-| Graphiti 提交与策略执行之间出现部分失败 | 切块检查点、固定的 Episode 名称、幂等策略、续传 |
+| Graphiti 提交与策略执行之间出现部分失败 | 两阶段检查点（Graphiti 写入前持久化暂存捕获）、固定的 Episode 名称、按 UUID 匹配重放、幂等策略（M0 已验证） |
 | 针对真实人物的合成内容 | `synthetic` 标记一路传递到事实、路径和问答；非公众人物使用化名 |
 
 ## 十四、环境与启动
+
+`main` 提供需求文档。请基于 `develop` 创建开发分支，该分支包含依赖锁定文件、`backend/.env.example` 和环境自检脚本。真实模型密钥与 Neo4j 凭据保存在 Git 忽略的本地 `.env`。
 
 **环境要求**
 
@@ -1081,8 +1151,10 @@ type ImageDraft = {
   * 需要生成向量的文本（实体名、事实描述）会发送到该服务；界面上的接收方提示会列出它。
 * **代理：** 会遵循环境变量中的 HTTP 和 SOCKS 代理（`HTTP(S)_PROXY`、`ALL_PROXY`）；`NO_PROXY` 中应包含 `127.0.0.1` 和 `localhost`，确保 Neo4j 和后端接口直连。
 
+**目标仓库布局**
+
 ```text
-backend/app/        api/ intake/ graph/ policy/ snapshot/ qa/ templates/
+backend/app/        api/ contracts/ intake/ graph/ overlay/ policy/ snapshot/ qa/ templates/
 backend/app/config.py  配置解析（应用与脚本共用）
 backend/scripts/    bootstrap_worktree.sh · check_env.py · seed_case.py · drop_source.py · export_snapshot.py   （场景脚本调用运行中的后端接口）
 backend/requirements.in · requirements.txt · .env.example
@@ -1107,7 +1179,7 @@ SEMAPHORE_LIMIT=4                      # Graphiti 内部 LLM、向量、检索�
 
 LLM_BASE_URL=https://api.deepseek.com
 LLM_API_KEY=
-LLM_MODEL=deepseek-flash               # 用于 Graphiti、视觉、问答；确切 ID 在 M0 中确认
+LLM_MODEL=deepseek-flash               # 用于 Graphiti、视觉、问答；M0 使用此模型
 LLM_SMALL_MODEL=deepseek-flash         # 仅用于 IntelGraph 的 P2 分类
 LLM_STRUCTURED_OUTPUT=json_object      # DeepSeek 只支持 json_object
 LLM_PROVIDER_PROFILE=deepseek          # 把思考强度 off/low/medium/high 映射为请求参数
@@ -1172,6 +1244,8 @@ venv/bin/python scripts/check_env.py                       # 检查 Python、gra
 
 **运行**
 
+以下命令在对应入口合入后使用。当前 `develop` 基线可配置和自检后端环境，前端可以先按第九章的数据契约手写快照并行开发。
+
 **终端 1 — 后端**（`backend/` 目录）：
 
 ```bash
@@ -1214,5 +1288,6 @@ pnpm install && pnpm dev                                    # http://127.0.0.1:5
 | 1.4.0 | 落实独立审核（Codex，已对照 `graphiti-core` 0.31.2 源码核实）：通过 `invalidated_by` 精确记录失效原因；失效写回；`IG_FactSupport` 证据；切块检查点与续传；改为 `graph.changed` + 重新拉取快照；图片草稿；P6 完整的状态流转；完整的样式与筛选规则；问答请求与事件流格式；修正场景 A/B；关闭遥测、端口只绑定本机、去掉 APOC；转述限级移入待实现；标题去掉“双时态”；修复中英文差异与失效链接。 |
 | 1.5.0 | **思考强度可选**（关闭/低/中/高，默认关闭）：抽取和分类按案件设置，问答按每次提问设置（可选显示未经校验的思考过程），由服务商配置映射、适配层注入。环境调试中验证的服务商事实：DeepSeek 只支持 `json_object`；默认开启思考，用 `thinking: {type: disabled}` 关闭；百炼的 OpenAI 兼容路径为 `/compatible-mode/v1`；向量模型的原生维度必须等于 `EMBEDDING_DIM`；SOCKS 代理下需要 `httpx[socks]`。环境改为 Homebrew 安装 Neo4j、使用云端向量服务。 |
 | 1.5.1 | **P3 复核**：P3 自动保留的 `CHANGE` 失效判定，在任何一方的最佳等级变化时重新检查；不再合规时写回，并开为 `contested_change`。只在一个方向上自动处理：等级变化从不自动让事实失效。**事实起点**（`display_valid_at_ts`，永不为空）在 5.4 统一定义，时间轴、路径、问答共用。新增并行 worktree 环境说明。 |
+| 1.5.2 | **落实 M0 技术验证的结论**（[报告](spikes/m0-report.md)）。**P3 陈述终点**：P1 捕获信源明确说出的结束时间（消歧合并时 Graphiti 会丢掉它，同起点复述时不会失效任何事实）；来源可靠度不低于目标时，P3 把它落实到唯一匹配的开放事实上，否则设置 `end_claimed` 转入审阅（*确认结束* / *驳回*）。**两阶段切块检查点**：Graphiti 写入前暂存捕获，发布前标记完成；重放要求 Episode UUID 匹配。**集成**：类型化属性归一化为必需（schema 回显）；命名规则、已知别名表和案件偏移随 `custom_extraction_instructions` 传入；只到日期的时间归一化到案件本地午夜；捕获钩子的位置；省略范围时的行为与案件 ID 格式；全文检索沿用默认分析器；视觉转写的整单拒绝重发；遥测检查须在 pytest 之外执行。**验收**：A5 固定到案件本地的 D+14 时刻；A1、A2、B3 的措辞更精确。**模块**：在 07/13 中新增 `contracts`（共享模型）和 `overlay`（`IG_*` 仓储）。 |
 
-**IntelGraph Development Team** | *Version 1.5.1-PRD* | *License: MIT*
+**IntelGraph Development Team** | *Version 1.5.2-PRD* | *License: MIT*

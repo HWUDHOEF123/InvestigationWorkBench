@@ -21,7 +21,7 @@
 | Reported-speech tier cap (a quoted character in a T1 narration counts as T3) | Needs per-support speaker attribution. In v1, enter each testimony as its own Source with a speaker. |
 | Verified literal spans (character offsets checked against the source) | In v1, excerpts are located automatically and labelled as such. |
 | Automatic conflict resolution by Tier 1 evidence | v1 only suggests. |
-| IntelGraph contradiction scan (catching what Graphiti misses) | In v1, the analyst marks these manually (P5). |
+| IntelGraph contradiction scan (catching what Graphiti misses) | In v1, the analyst marks these manually (P5). Exception: ends stated by a source for an open fact are applied in v1 by P3 *stated ends* ([06](06-contradiction-policy.md)). |
 | Automatic duplicate-entity queue | v1 relies on Graphiti resolution, the known-alias list and manual merge. |
 | Stateful fixture API (mutations without LLM) | v1 fixture mode is read-only. |
 | AI hypothesis nodes; dossier export; manual fact editing | |
