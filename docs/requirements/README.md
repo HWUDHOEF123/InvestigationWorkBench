@@ -59,6 +59,12 @@ The v1 core loop is: **ingest sources → view the graph at any event time → r
    * Graphiti telemetry is off.
 
    → 07
+9. **Parallel worktrees share one Neo4j.**
+   * Settings resolve via `app/config.py`, so secrets come from the main worktree.
+   * Every Graphiti `group_id` is `<namespace>__<case_id>`.
+   * Tests delete only their own `group_id`s; never call `clear_data()` unscoped.
+
+   → 13
 
 ## Glossary
 
