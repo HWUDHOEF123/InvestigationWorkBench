@@ -1,6 +1,6 @@
-# InvestigationWorkBench
+# VeriTrace
 
-**InvestigationWorkBench** 是一款基于**时态知识图谱（Temporal Knowledge Graph）**与**图谱检索增强问答**的交互式 AI 情报调查工作台。产品打破传统线性对话框范式，通过 **「空间图谱画布 + 时间轴回放 + 可信度驱动的矛盾治理」**，帮助分析师从海量、碎片化且存在真伪冲突的跨时间材料中，快速还原事件脉络、锁定逻辑漏洞，并生成句句可溯源的研判结论。
+**VeriTrace** 是一款基于**时态知识图谱（Temporal Knowledge Graph）**与**图谱检索增强问答**的交互式 AI 情报调查工作台。产品打破传统线性对话框范式，通过 **「空间图谱画布 + 时间轴回放 + 可信度驱动的矛盾治理」**，帮助分析师从海量、碎片化且存在真伪冲突的跨时间材料中，快速还原事件脉络、锁定逻辑漏洞，并生成句句可溯源的研判结论。
 
 > **本地优先**：服务仅监听 `127.0.0.1`，原图脱敏不出浏览器 · **状态**：积极开发中（M0 已完成）  
 > 📖 [中文需求文档](<docs/requirements(cn).md>) · [Requirements (EN)](docs/requirements/README.md) · [环境搭建](docs/requirements/13-setup.md) · [参与开发](#参与开发)

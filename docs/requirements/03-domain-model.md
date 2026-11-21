@@ -6,20 +6,20 @@
 
 | Object | Meaning | Owner |
 | :--- | :--- | :--- |
-| **Case** | One investigation: a template and version, a time zone, a versioned case brief, an optional story anchor, and settings. The settings hold thinking levels for extraction, classification and the Q&A default; each defaults to `off`. Maps to a Graphiti `group_id`. | IntelGraph |
-| **Source** | One unit of evidence (document, confirmed image set or note) with tier, `reference_time`, optional speaker and flags. See [04](04-sources-and-tiers.md). | IntelGraph |
-| **Chunk** | A deterministic slice of a Source's normalized text, with character offsets and a two-phase checkpoint: *staged* (the P1 capture is persisted before Graphiti writes) and *complete* (the policy finished, so the revision can be published). See [F1](features/F1-source-intake.md). | IntelGraph |
+| **Case** | One investigation: a template and version, a time zone, a versioned case brief, an optional story anchor, and settings. The settings hold thinking levels for extraction, classification and the Q&A default; each defaults to `off`. Maps to a Graphiti `group_id`. | VeriTrace |
+| **Source** | One unit of evidence (document, confirmed image set or note) with tier, `reference_time`, optional speaker and flags. See [04](04-sources-and-tiers.md). | VeriTrace |
+| **Chunk** | A deterministic slice of a Source's normalized text, with character offsets and a two-phase checkpoint: *staged* (the P1 capture is persisted before Graphiti writes) and *complete* (the policy finished, so the revision can be published). See [F1](features/F1-source-intake.md). | VeriTrace |
 | **Episode** | The Graphiti `EpisodicNode` for one chunk. It is named `{source_id}:{chunk_index}`, and its `valid_at` is the Source's `reference_time`. | Graphiti |
 | **Entity** | A Graphiti `EntityNode`, typed per the ontology below. | Graphiti (+ merge projection) |
 | **Fact** | A Graphiti `EntityEdge`: relation name, Chinese `fact` text, `valid_at` / `invalid_at`, `episodes`, `attributes`. | Graphiti |
-| **Support** | `IG_FactSupport`: one `(fact, source, episode)` link. It is created whenever an episode creates a fact or re-confirms it as a duplicate. It carries the source's tier, speculative/synthetic flags, an automatically located excerpt, and a `stated_end` when the source states an end for the claim ([06](06-contradiction-policy.md) P1). | IntelGraph |
-| **Conflict** | A recorded contradiction between facts, with its kind, suggestion, state and adjudication history. See [06](06-contradiction-policy.md). | IntelGraph |
-| **Decision record** | An append-only audit entry for each policy decision and analyst action (closure kept / written back, stated end applied / claimed / confirmed / dismissed, adjudication, merge, tier change, skipped review, undo). It stores before/after values and is the basis for undo. | IntelGraph |
-| **Revision** | A monotonically increasing version of the case's effective graph, published after each chunk's policy completes and after each analyst mutation. | IntelGraph |
+| **Support** | `IG_FactSupport`: one `(fact, source, episode)` link. It is created whenever an episode creates a fact or re-confirms it as a duplicate. It carries the source's tier, speculative/synthetic flags, an automatically located excerpt, and a `stated_end` when the source states an end for the claim ([06](06-contradiction-policy.md) P1). | VeriTrace |
+| **Conflict** | A recorded contradiction between facts, with its kind, suggestion, state and adjudication history. See [06](06-contradiction-policy.md). | VeriTrace |
+| **Decision record** | An append-only audit entry for each policy decision and analyst action (closure kept / written back, stated end applied / claimed / confirmed / dismissed, adjudication, merge, tier change, skipped review, undo). It stores before/after values and is the basis for undo. | VeriTrace |
+| **Revision** | A monotonically increasing version of the case's effective graph, published after each chunk's policy completes and after each analyst mutation. | VeriTrace |
 
 ## Ownership and write-back
 
-* Graphiti owns entities, edges and episodes. IntelGraph state lives in `IG_*` nodes in the same Neo4j database, keyed by Graphiti UUIDs:
+* Graphiti owns entities, edges and episodes. VeriTrace state lives in `IG_*` nodes in the same Neo4j database, keyed by Graphiti UUIDs:
   * `IG_Case`, `IG_Source`, `IG_Chunk`
   * `IG_ImageDraft`
   * `IG_FactSupport`
@@ -29,7 +29,7 @@
   * `IG_Decision`
 * **Only one write to Graphiti data is allowed.** When P3 or P6 overrides a closure, or applies a stated end, the Graphiti adapter writes `invalid_at` / `expired_at` back onto that edge. It stores the original values in a decision record and restores them on undo.
 * Write-back keeps Graphiti's own later contradiction checks consistent with what the analyst sees. Graphiti reads these fields from the database and does not see the overlay.
-* All other Graphiti properties are read-only to IntelGraph.
+* All other Graphiti properties are read-only to VeriTrace.
 * The **Snapshot Builder** combines Graphiti data with merges, supports, conflicts and flags into the *effective graph* for one revision. It caches that graph for the snapshot and Q&A.
 
 ## Ontology

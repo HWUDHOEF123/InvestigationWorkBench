@@ -91,7 +91,7 @@ graph TD
 
   * **`json_object` is required.** DeepSeek's Chat Completions API supports only `text` and `json_object`; there is no `json_schema`.
   * **Graphiti uses one model.** This client does not route requests to `small_model`.
-  * IntelGraph's own calls go through the OpenAI SDK; P2 classification may use `LLM_SMALL_MODEL`.
+  * VeriTrace's own calls go through the OpenAI SDK; P2 classification may use `LLM_SMALL_MODEL`.
   * **Typed-attribute normalization is mandatory.** In `json_object` mode, Graphiti pastes the raw JSON Schema into the prompt. DeepSeek then often wraps attribute values in `properties` (or `attributes`, or the type name). Graphiti keeps undeclared keys, so the nested map reaches Neo4j and the whole episode rolls back.
     * The adapter's `generate_response` override unwraps one such level for attribute-extraction calls.
     * It keeps only declared fields that pass strict validation.
@@ -127,7 +127,7 @@ graph TD
 * **Embedder.** Use `OpenAIEmbedder` against a multilingual endpoint. The default is Alibaba Bailian `qwen3.7-text-embedding`, at 1024 dimensions, served on the OpenAI-compatible path `/compatible-mode/v1` (not DashScope's native `/api/v1`).
   * Graphiti does not send a `dimensions` argument; it truncates vectors to `EMBEDDING_DIM`. The model's **native** output dimension must therefore equal `EMBEDDING_DIM`.
   * Pin both the model and the dimension.
-* **Cross-encoder.** Inject an order-preserving stub that implements `CrossEncoderClient`. This means no OpenAI key is needed. IntelGraph does not use Graphiti's search scoring. `Graphiti.search()` never calls the stub, so the smoke test uses `search_()` with a cross-encoder recipe.
+* **Cross-encoder.** Inject an order-preserving stub that implements `CrossEncoderClient`. This means no OpenAI key is needed. VeriTrace does not use Graphiti's search scoring. `Graphiti.search()` never calls the stub, so the smoke test uses `search_()` with a cross-encoder recipe.
 * **Excerpt location.** After each chunk, `policy` embeds the chunk's sentences once. For each new support, the sentence nearest to the fact text becomes the excerpt (`located: "auto"`). If no sentence passes the threshold, the whole chunk is used (`located: "none"`). No LLM call is involved.
 * **Full-text search.** Keep Graphiti's default analyzer. Neither M0 trial found a recall gain from `cjk`. The 30-query comparison returned the same recall@10 and MRR with both analyzers. Create named indexes with `IF NOT EXISTS` and leave existing shared indexes in place.
 * **Telemetry.** Graphiti telemetry is on by default. Set `GRAPHITI_TELEMETRY_ENABLED=false` before Graphiti is imported. Run the acceptance check in a normal process: Graphiti forces telemetry off under pytest, which would mask a missing setting.
